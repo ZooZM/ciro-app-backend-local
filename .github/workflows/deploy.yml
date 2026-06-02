@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main  # Triggers automatically when you push to main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,6 +21,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 60s
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Ensure node and npm are available on the server
