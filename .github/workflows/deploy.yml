@@ -1,10 +1,10 @@
-name: Deploy NestJS App to VPS
+name: Deploy NestJS App to VPS via Docker
 
 on:
   push:
     branches:
-      - main  # Triggers automatically when you push to main
-  workflow_dispatch:
+      - main  # Runs automatically on push to main
+  workflow_dispatch: # Allows manually triggering the workflow from GitHub
 
 jobs:
   deploy:
@@ -21,23 +21,19 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          timeout: 60s
+          timeout: 15m # Increased to 15 minutes because Docker build takes longer
           script: |
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Ensure node and npm are available on the server
-            
             cd /var/www/html/ciro-chat-backend
             
             echo "Pulling latest changes from Git..."
             git pull origin main
             
-            echo "Installing production dependencies..."
-            npm install
+            echo "Building and deploying containers via Docker Compose..."
+            # Rebuilds and restarts only the app container without stopping MongoDB and Redis
+            docker compose up -d --build app
             
-            echo "Building the NestJS application..."
-            npm run build
-            
-            echo "Restarting application via PM2..."
-            pm2 restart ciro-chat-prod || pm2 start dist/main.js --name "ciro-chat-prod"
+            echo "Cleaning up unused Docker images to save space..."
+            # Remove old dangling images to free disk space on the server
+            docker image prune -f
             
             echo "Deployment finished successfully!"
