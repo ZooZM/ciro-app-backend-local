@@ -35,9 +35,9 @@ async function bootstrap() {
   // 3. Global Validation Pipeline
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,              // Strips non-whitelisted properties from DTOs
-      forbidNonWhitelisted: true,     // Rejects raw requests containing unknown properties
-      transform: true,              // Transforms payloads to class instances
+      whitelist: true, // Strips non-whitelisted properties from DTOs
+      forbidNonWhitelisted: true, // Rejects raw requests containing unknown properties
+      transform: true, // Transforms payloads to class instances
       transformOptions: {
         enableImplicitConversion: true,
       },
@@ -48,7 +48,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new GlobalResponseInterceptor());
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // NOTE: Rate Limiting with Redis is best configured using ThrottlerModule directly 
+  // NOTE: Rate Limiting with Redis is best configured using ThrottlerModule directly
   // in the AppModule rather than main.ts for better Dependency Injection lifecycle support.
 
   const port = process.env.PORT || 3000;

@@ -26,10 +26,12 @@ let ChatRoomsRepository = class ChatRoomsRepository extends base_repository_1.Ba
     }
     async findPrivateRoom(userA, userB) {
         const participants = [new mongoose_2.Types.ObjectId(userA), new mongoose_2.Types.ObjectId(userB)];
-        return this.chatRoomModel.findOne({
+        return this.chatRoomModel
+            .findOne({
             type: 'PRIVATE',
             participants: { $all: participants, $size: 2 },
-        }).exec();
+        })
+            .exec();
     }
     async getUserRooms(userId, limit, cursor) {
         const query = { participants: new mongoose_2.Types.ObjectId(userId) };
@@ -45,7 +47,9 @@ let ChatRoomsRepository = class ChatRoomsRepository extends base_repository_1.Ba
             .exec();
     }
     async updateLastMessage(roomId, messageId) {
-        await this.chatRoomModel.updateOne({ _id: new mongoose_2.Types.ObjectId(roomId) }, { lastMessage: new mongoose_2.Types.ObjectId(messageId) }).exec();
+        await this.chatRoomModel
+            .updateOne({ _id: new mongoose_2.Types.ObjectId(roomId) }, { lastMessage: new mongoose_2.Types.ObjectId(messageId) })
+            .exec();
     }
     async findById(roomId) {
         return this.chatRoomModel.findById(roomId).exec();
@@ -58,16 +62,24 @@ let ChatRoomsRepository = class ChatRoomsRepository extends base_repository_1.Ba
             .exec();
     }
     async addParticipants(roomId, userIds) {
-        return this.chatRoomModel.findByIdAndUpdate(roomId, { $addToSet: { participants: { $each: userIds } } }, { new: true }).exec();
+        return this.chatRoomModel
+            .findByIdAndUpdate(roomId, { $addToSet: { participants: { $each: userIds } } }, { new: true })
+            .exec();
     }
     async removeParticipant(roomId, userId) {
-        return this.chatRoomModel.findByIdAndUpdate(roomId, { $pull: { participants: userId } }, { new: true }).exec();
+        return this.chatRoomModel
+            .findByIdAndUpdate(roomId, { $pull: { participants: userId } }, { new: true })
+            .exec();
     }
     async removeAdmin(roomId, phoneNumber) {
-        return this.chatRoomModel.findByIdAndUpdate(roomId, { $pull: { admins: phoneNumber } }, { new: true }).exec();
+        return this.chatRoomModel
+            .findByIdAndUpdate(roomId, { $pull: { admins: phoneNumber } }, { new: true })
+            .exec();
     }
     async addAdmin(roomId, phoneNumber) {
-        return this.chatRoomModel.findByIdAndUpdate(roomId, { $addToSet: { admins: phoneNumber } }, { new: true }).exec();
+        return this.chatRoomModel
+            .findByIdAndUpdate(roomId, { $addToSet: { admins: phoneNumber } }, { new: true })
+            .exec();
     }
 };
 exports.ChatRoomsRepository = ChatRoomsRepository;

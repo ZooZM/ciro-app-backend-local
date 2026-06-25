@@ -10,9 +10,11 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { StatusModule } from './modules/status/status.module';
 import { VideoModule } from './modules/video/video.module';
 import { MapModule } from './modules/map/map.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { TranslationModule } from './modules/translation/translation.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -30,9 +32,22 @@ import * as Joi from 'joi';
         LIVEKIT_API_KEY: Joi.string().required(),
         LIVEKIT_API_SECRET: Joi.string().required(),
         LIVEKIT_WS_URL: Joi.string().required(),
+
+        // On-Demand Real-time Video Call Translation (specs/001-realtime-call-translation)
+        GOOGLE_APPLICATION_CREDENTIALS: Joi.string().optional(),
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: Joi.string().optional(),
+        GOOGLE_PROJECT_ID: Joi.string().optional(),
+        TRANSLATION_PRIMARY_LANGUAGE: Joi.string().default('en-US'),
+        TRANSLATION_CANDIDATE_LANGUAGES:
+          Joi.string().default('ar-SA,fr-FR,es-ES'),
+        TRANSLATION_INTERIM_RATE_PER_SEC: Joi.number().default(2),
+        TRANSLATION_IDLE_GRACE_MS: Joi.number().default(10000),
+        TRANSLATION_LOW_BALANCE_SECONDS: Joi.number().default(30),
+        TRANSLATION_ACTIVATION_MIN_SECONDS: Joi.number().default(1),
+        TRANSLATION_WORKER_ROLE: Joi.string().default('translation-worker'),
       }),
     }),
-    
+
     // Configure Throttler Module
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -44,7 +59,9 @@ import * as Joi from 'joi';
             limit: 100, // 100 requests per minute by default
           },
         ],
-        storage: new RedisThrottlerStorage(config.get<string>('REDIS_URL') || 'redis://localhost:6379'),
+        storage: new RedisThrottlerStorage(
+          config.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        ),
       }),
     }),
 
@@ -54,11 +71,12 @@ import * as Joi from 'joi';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         connection: {
-          url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+          url:
+            configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
         },
       }),
     }),
-    
+
     // Configure MongoDB Connection
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
@@ -73,9 +91,11 @@ import * as Joi from 'joi';
     AuthModule,
     RedisModule,
     ChatModule,
+    StatusModule,
     VideoModule,
     MapModule,
     PaymentModule,
+    TranslationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

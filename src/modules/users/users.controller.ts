@@ -1,4 +1,12 @@
-import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SyncContactsDto } from './dto/sync-contacts.dto';
@@ -20,7 +28,10 @@ export class UsersController {
   @Post('sync-contacts')
   @HttpCode(HttpStatus.OK)
   async syncContacts(@Request() req: any, @Body() dto: SyncContactsDto) {
-    const registeredContacts = await this.usersService.syncContacts(dto.phoneNumbers);
+    const registeredContacts = await this.usersService.syncContacts(
+      req.user.userId,
+      dto.phoneNumbers,
+    );
 
     return {
       message: `Found ${registeredContacts.length} registered contact(s).`,

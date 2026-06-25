@@ -23,7 +23,9 @@ let DeviceTokensRepository = class DeviceTokensRepository {
         this.model = model;
     }
     async upsertToken(userId, token, platform) {
-        await this.model.findOneAndUpdate({ userId: new mongoose_2.Types.ObjectId(userId), token }, { $set: { platform, userId: new mongoose_2.Types.ObjectId(userId), token } }, { upsert: true }).exec();
+        await this.model
+            .findOneAndUpdate({ userId: new mongoose_2.Types.ObjectId(userId), token }, { $set: { platform, userId: new mongoose_2.Types.ObjectId(userId), token } }, { upsert: true })
+            .exec();
     }
     async getTokens(userId) {
         return this.model.find({ userId: new mongoose_2.Types.ObjectId(userId) }).exec();

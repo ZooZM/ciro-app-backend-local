@@ -16,7 +16,13 @@ export declare class ChatService {
         roomId: string;
         room: ChatRoomDocument;
     }>;
-    saveMessage(senderId: string, payload: SendMessageDto): Promise<{
+    saveMessage(senderId: string, payload: SendMessageDto, extra?: {
+        statusRef?: {
+            statusId: Types.ObjectId;
+            statusAuthorId: Types.ObjectId;
+            expiresAt: Date;
+        };
+    }): Promise<{
         message: MessageDocument;
         isNew: boolean;
     }>;

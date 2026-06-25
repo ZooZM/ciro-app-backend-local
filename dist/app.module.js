@@ -52,9 +52,11 @@ const users_module_1 = require("./modules/users/users.module");
 const auth_module_1 = require("./modules/auth/auth.module");
 const redis_module_1 = require("./modules/redis/redis.module");
 const chat_module_1 = require("./modules/chat/chat.module");
+const status_module_1 = require("./modules/status/status.module");
 const video_module_1 = require("./modules/video/video.module");
 const map_module_1 = require("./modules/map/map.module");
 const payment_module_1 = require("./modules/payment/payment.module");
+const translation_module_1 = require("./modules/translation/translation.module");
 const Joi = __importStar(require("joi"));
 let AppModule = class AppModule {
 };
@@ -74,6 +76,16 @@ exports.AppModule = AppModule = __decorate([
                     LIVEKIT_API_KEY: Joi.string().required(),
                     LIVEKIT_API_SECRET: Joi.string().required(),
                     LIVEKIT_WS_URL: Joi.string().required(),
+                    GOOGLE_APPLICATION_CREDENTIALS: Joi.string().optional(),
+                    GOOGLE_APPLICATION_CREDENTIALS_JSON: Joi.string().optional(),
+                    GOOGLE_PROJECT_ID: Joi.string().optional(),
+                    TRANSLATION_PRIMARY_LANGUAGE: Joi.string().default('en-US'),
+                    TRANSLATION_CANDIDATE_LANGUAGES: Joi.string().default('ar-SA,fr-FR,es-ES'),
+                    TRANSLATION_INTERIM_RATE_PER_SEC: Joi.number().default(2),
+                    TRANSLATION_IDLE_GRACE_MS: Joi.number().default(10000),
+                    TRANSLATION_LOW_BALANCE_SECONDS: Joi.number().default(30),
+                    TRANSLATION_ACTIVATION_MIN_SECONDS: Joi.number().default(1),
+                    TRANSLATION_WORKER_ROLE: Joi.string().default('translation-worker'),
                 }),
             }),
             throttler_1.ThrottlerModule.forRootAsync({
@@ -109,9 +121,11 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             redis_module_1.RedisModule,
             chat_module_1.ChatModule,
+            status_module_1.StatusModule,
             video_module_1.VideoModule,
             map_module_1.MapModule,
             payment_module_1.PaymentModule,
+            translation_module_1.TranslationModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

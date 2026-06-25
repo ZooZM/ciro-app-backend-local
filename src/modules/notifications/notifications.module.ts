@@ -6,7 +6,9 @@ import { PushService } from './push.service';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: DeviceToken.name, schema: DeviceTokenSchema }]),
+    MongooseModule.forFeature([
+      { name: DeviceToken.name, schema: DeviceTokenSchema },
+    ]),
   ],
   providers: [DeviceTokensRepository, PushService],
   exports: [PushService, DeviceTokensRepository],

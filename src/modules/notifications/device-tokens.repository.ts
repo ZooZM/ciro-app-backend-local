@@ -10,12 +10,18 @@ export class DeviceTokensRepository {
     private readonly model: Model<DeviceTokenDocument>,
   ) {}
 
-  async upsertToken(userId: string, token: string, platform: 'fcm' | 'apns'): Promise<void> {
-    await this.model.findOneAndUpdate(
-      { userId: new Types.ObjectId(userId), token },
-      { $set: { platform, userId: new Types.ObjectId(userId), token } },
-      { upsert: true },
-    ).exec();
+  async upsertToken(
+    userId: string,
+    token: string,
+    platform: 'fcm' | 'apns',
+  ): Promise<void> {
+    await this.model
+      .findOneAndUpdate(
+        { userId: new Types.ObjectId(userId), token },
+        { $set: { platform, userId: new Types.ObjectId(userId), token } },
+        { upsert: true },
+      )
+      .exec();
   }
 
   async getTokens(userId: string): Promise<DeviceTokenDocument[]> {

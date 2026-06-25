@@ -13,9 +13,7 @@ describe('VideoController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VideoController],
-      providers: [
-        { provide: VideoService, useValue: videoService },
-      ],
+      providers: [{ provide: VideoService, useValue: videoService }],
     }).compile();
 
     controller = module.get<VideoController>(VideoController);
@@ -31,8 +29,12 @@ describe('VideoController', () => {
         user: { userId: 'user-123', name: 'John' },
       };
       const result = await controller.joinRoom('room-456', mockRequest);
-      
-      expect(videoService.generateRoomToken).toHaveBeenCalledWith('user-123', 'John', 'room-456');
+
+      expect(videoService.generateRoomToken).toHaveBeenCalledWith(
+        'user-123',
+        'John',
+        'room-456',
+      );
       expect(result).toEqual({ token: 'test-token' });
     });
   });

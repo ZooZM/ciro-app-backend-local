@@ -7,9 +7,12 @@ import { PaymentService } from './payment.service';
 
 // A minimal inline definition for the Order model to fulfill standard DI.
 // In a production app, this would be imported from a centralized Database/Orders module.
-const OrderSchema = new Schema({
-  status: { type: String, default: 'PENDING' },
-}, { strict: false, timestamps: true }); // strict: false allows Mongoose to save any other properties transparently
+const OrderSchema = new Schema(
+  {
+    status: { type: String, default: 'PENDING' },
+  },
+  { strict: false, timestamps: true },
+); // strict: false allows Mongoose to save any other properties transparently
 
 @Module({
   imports: [

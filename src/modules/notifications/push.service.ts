@@ -6,12 +6,16 @@ import { DeviceTokensRepository } from './device-tokens.repository';
 export class PushService implements OnModuleInit {
   private readonly logger = new Logger(PushService.name);
 
-  constructor(private readonly deviceTokensRepository: DeviceTokensRepository) {}
+  constructor(
+    private readonly deviceTokensRepository: DeviceTokensRepository,
+  ) {}
 
   onModuleInit() {
     const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
     if (!serviceAccountJson) {
-      this.logger.warn('FIREBASE_SERVICE_ACCOUNT not set — push notifications disabled');
+      this.logger.warn(
+        'FIREBASE_SERVICE_ACCOUNT not set — push notifications disabled',
+      );
       return;
     }
     if (admin.apps.length > 0) return;
@@ -21,7 +25,10 @@ export class PushService implements OnModuleInit {
     this.logger.log('Firebase Admin initialised');
   }
 
-  async sendPush(deviceToken: string, payload: { title: string; body: string; data?: Record<string, string> }): Promise<void> {
+  async sendPush(
+    deviceToken: string,
+    payload: { title: string; body: string; data?: Record<string, string> },
+  ): Promise<void> {
     if (admin.apps.length === 0) return;
     try {
       await admin.messaging().send({
@@ -34,13 +41,30 @@ export class PushService implements OnModuleInit {
     }
   }
 
-  async notifyOfflineUser(userId: string, message: { content: string; senderName?: string; roomId: string }): Promise<void> {
+  async notifyOfflineUser(
+    userId: string,
+    message: { content: string; senderName?: string; roomId: string },
+  ): Promise<void> {
     const tokens = await this.deviceTokensRepository.getTokens(userId);
     for (const doc of tokens) {
       await this.sendPush(doc.token, {
         title: message.senderName ?? 'New message',
         body: message.content || 'You have a new message',
         data: { roomId: message.roomId },
+      });
+    }
+  }
+
+  async notifyStatusReaction(
+    userId: string,
+    message: { reactorName: string; statusId: string },
+  ): Promise<void> {
+    const tokens = await this.deviceTokensRepository.getTokens(userId);
+    for (const doc of tokens) {
+      await this.sendPush(doc.token, {
+        title: message.reactorName || 'Someone',
+        body: 'loved your status',
+        data: { type: 'statusReaction', statusId: message.statusId },
       });
     }
   }

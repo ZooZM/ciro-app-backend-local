@@ -86,20 +86,51 @@ let UsersService = class UsersService {
         await this.usersRepository.updateOne({ _id: id }, { refreshToken });
     }
     async updateLocation(userId, lng, lat) {
+        const locationUpdatedAt = new Date();
         await this.usersRepository.updateOne({ _id: userId }, {
             $set: {
                 location: {
                     type: 'Point',
                     coordinates: [lng, lat],
                 },
+                locationUpdatedAt,
+                isSharingLocation: true,
             },
         });
+        return locationUpdatedAt;
     }
-    async getNearbyUsers(userId, lng, lat, maxDistanceKm) {
-        return this.usersRepository.getNearbyUsers(userId, lng, lat, maxDistanceKm);
+    async setSharingLocation(userId, enabled) {
+        await this.usersRepository.updateOne({ _id: userId }, {
+            isSharingLocation: enabled,
+        });
     }
-    async syncContacts(phoneNumbers) {
+    async getNearbyUsers(userId, lng, lat, maxDistanceKm, allowedUserIds) {
+        return this.usersRepository.getNearbyUsers(userId, lng, lat, maxDistanceKm, allowedUserIds);
+    }
+    async setGhostMode(userId, enabled) {
+        await this.usersRepository.updateOne({ _id: userId }, {
+            isGhostMode: enabled,
+        });
+    }
+    async isGhostMode(userId) {
+        const user = await this.usersRepository.findById(userId);
+        return user?.isGhostMode === true;
+    }
+    async getBlockedUserIds(userId) {
+        const user = await this.usersRepository.findById(userId);
+        return (user?.blockedUsers ?? []).map((id) => id.toString());
+    }
+    async findManyByIds(ids) {
+        return this.usersRepository.findManyByIds(ids);
+    }
+    async syncContacts(userId, phoneNumbers) {
+        await this.usersRepository.updateOne({ _id: userId }, {
+            $set: { syncedContacts: phoneNumbers },
+        });
         return this.usersRepository.findByPhoneNumbers(phoneNumbers);
+    }
+    async findMutualContactIds(userId) {
+        return this.usersRepository.findMutualContactIds(userId);
     }
     async updateOnlineStatus(userId, isOnline) {
         await this.usersRepository.updateOne({ _id: userId }, { isOnline });

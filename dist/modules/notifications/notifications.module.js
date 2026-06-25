@@ -18,7 +18,9 @@ exports.NotificationsModule = NotificationsModule;
 exports.NotificationsModule = NotificationsModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: device_token_schema_1.DeviceToken.name, schema: device_token_schema_1.DeviceTokenSchema }]),
+            mongoose_1.MongooseModule.forFeature([
+                { name: device_token_schema_1.DeviceToken.name, schema: device_token_schema_1.DeviceTokenSchema },
+            ]),
         ],
         providers: [device_tokens_repository_1.DeviceTokensRepository, push_service_1.PushService],
         exports: [push_service_1.PushService, device_tokens_repository_1.DeviceTokensRepository],

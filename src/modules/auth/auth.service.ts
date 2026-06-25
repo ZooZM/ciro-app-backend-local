@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, Inject, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  Inject,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { SendOtpDto } from './dto/send-otp.dto';
@@ -23,7 +28,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     @Inject('REDIS_CLIENT') private redisClient: Redis,
-  ) { }
+  ) {}
 
   async sendOtp(sendOtpDto: SendOtpDto): Promise<{ message: string }> {
     const { phoneNumber } = sendOtpDto;
@@ -37,7 +42,9 @@ export class AuthService {
     await this.redisClient.set(phoneNumber, otp, 'EX', 180);
 
     // In a real app, integrate SMS provider (Twilio/Firebase)
-    console.log(`[OTP GENERATED] sending to fixed email: ${fixedEmail} (requested for: ${phoneNumber}), code: ${otp}`);
+    console.log(
+      `[OTP GENERATED] sending to fixed email: ${fixedEmail} (requested for: ${phoneNumber}), code: ${otp}`,
+    );
 
     return { message: 'OTP sent successfully' };
   }
@@ -56,7 +63,7 @@ export class AuthService {
       user = await this.usersService.create({
         phoneNumber,
         name: 'New User', // Default name until they update their profile
-        isPhoneVerified: true
+        isPhoneVerified: true,
       });
     } else if (!user.isPhoneVerified) {
       // If it exists but wasn't verified, verify it
@@ -75,12 +82,17 @@ export class AuthService {
 
     // Check if user already exists
     if (phoneNumber) {
-      const existingPhone = await this.usersService.findByPhoneNumber(phoneNumber);
-      if (existingPhone) throw new ConflictException('User with this phone number already exists');
+      const existingPhone =
+        await this.usersService.findByPhoneNumber(phoneNumber);
+      if (existingPhone)
+        throw new ConflictException(
+          'User with this phone number already exists',
+        );
     }
     if (email) {
       const existingEmail = await this.usersService.findByEmail(email);
-      if (existingEmail) throw new ConflictException('User with this email already exists');
+      if (existingEmail)
+        throw new ConflictException('User with this email already exists');
     }
 
     // usersService.create handles bcrypt hashing internally
@@ -101,7 +113,8 @@ export class AuthService {
     let payload: { sub: string; phoneNumber: string };
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
-        secret: this.configService.get<string>('JWT_SECRET') || 'default-secret',
+        secret:
+          this.configService.get<string>('JWT_SECRET') || 'default-secret',
       });
     } catch {
       throw new UnauthorizedException(AUTH_ERR_INVALID_OR_EXPIRED);
@@ -139,17 +152,30 @@ export class AuthService {
   }
 
   private async generateAuthResponse(user: any) {
-    const payload = { sub: user._id.toString(), phoneNumber: user.phoneNumber, name: user.name };
+    const payload = {
+      sub: user._id.toString(),
+      phoneNumber: user.phoneNumber,
+      name: user.name,
+    };
 
-    const accessTokenExpiresIn = this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '15m';
-    const refreshTokenExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '365d';
+    const accessTokenExpiresIn =
+      this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '15m';
+    const refreshTokenExpiresIn =
+      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '365d';
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn: accessTokenExpiresIn as any }),
-      this.jwtService.signAsync(payload, { expiresIn: refreshTokenExpiresIn as any }),
+      this.jwtService.signAsync(payload, {
+        expiresIn: accessTokenExpiresIn as any,
+      }),
+      this.jwtService.signAsync(payload, {
+        expiresIn: refreshTokenExpiresIn as any,
+      }),
     ]);
 
-    await this.usersService.updateRefreshToken(user._id.toString(), refreshToken);
+    await this.usersService.updateRefreshToken(
+      user._id.toString(),
+      refreshToken,
+    );
 
     const userObj = user.toObject();
     delete userObj.password;

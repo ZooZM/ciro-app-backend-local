@@ -49,7 +49,10 @@ describe('ChatService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
-        { provide: getModelToken(ChatRoom.name), useValue: chatRoomConstructor },
+        {
+          provide: getModelToken(ChatRoom.name),
+          useValue: chatRoomConstructor,
+        },
         { provide: getModelToken(Message.name), useValue: messageConstructor },
       ],
     }).compile();
@@ -95,10 +98,13 @@ describe('ChatService', () => {
 
     it('should save a message and update room lastMessage', async () => {
       chatRoomModel.findById.mockResolvedValue(mockRoom);
-      const result = await service.saveMessage(mockRoom.participants[0].toHexString(), {
-        chatRoomId: mockRoom._id.toHexString(),
-        content: 'Hi',
-      });
+      const result = await service.saveMessage(
+        mockRoom.participants[0].toHexString(),
+        {
+          chatRoomId: mockRoom._id.toHexString(),
+          content: 'Hi',
+        },
+      );
       expect(result).toBeDefined();
       expect(mockRoom.save).toHaveBeenCalled();
     });
@@ -114,7 +120,9 @@ describe('ChatService', () => {
       };
       chatRoomModel.find.mockReturnValue(mockQuery);
 
-      const result = await service.getUserRooms(mockRoom.participants[0].toHexString());
+      const result = await service.getUserRooms(
+        mockRoom.participants[0].toHexString(),
+      );
       expect(result).toEqual([mockRoom]);
       expect(chatRoomModel.find).toHaveBeenCalledWith(
         expect.objectContaining({ participants: expect.anything() }),

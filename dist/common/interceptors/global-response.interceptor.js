@@ -12,8 +12,12 @@ const operators_1 = require("rxjs/operators");
 let GlobalResponseInterceptor = class GlobalResponseInterceptor {
     intercept(context, next) {
         return next.handle().pipe((0, operators_1.map)((data) => {
-            const returnedMessage = typeof data === 'object' && data !== null && 'message' in data ? data.message : 'Request successful';
-            const returnedData = typeof data === 'object' && data !== null && 'data' in data ? data.data : data;
+            const returnedMessage = typeof data === 'object' && data !== null && 'message' in data
+                ? data.message
+                : 'Request successful';
+            const returnedData = typeof data === 'object' && data !== null && 'data' in data
+                ? data.data
+                : data;
             return {
                 success: true,
                 message: returnedMessage,

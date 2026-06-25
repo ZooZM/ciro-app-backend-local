@@ -38,6 +38,48 @@ export declare class MessageMetadata {
     thumbnailUrl?: string;
 }
 export type MessageDocument = Message & Document;
+export declare class StatusRef {
+    statusId: Types.ObjectId;
+    statusAuthorId: Types.ObjectId;
+    expiresAt: Date;
+}
+export declare const StatusRefSchema: import("mongoose").Schema<StatusRef, import("mongoose").Model<StatusRef, any, any, any, any, any, StatusRef>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, StatusRef, Document<unknown, {}, StatusRef, {
+    id: string;
+}, import("mongoose").DefaultSchemaOptions> & Omit<StatusRef & {
+    _id: Types.ObjectId;
+} & {
+    __v: number;
+}, "id"> & {
+    id: string;
+}, {
+    statusId?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId, StatusRef, Document<unknown, {}, StatusRef, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<StatusRef & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    statusAuthorId?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId, StatusRef, Document<unknown, {}, StatusRef, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<StatusRef & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    expiresAt?: import("mongoose").SchemaDefinitionProperty<Date, StatusRef, Document<unknown, {}, StatusRef, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<StatusRef & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+}, StatusRef>;
 export declare class Message {
     chatRoomId: Types.ObjectId;
     senderId: Types.ObjectId;
@@ -51,6 +93,7 @@ export declare class Message {
     readBy: string[];
     isDeleted: boolean;
     waveformSamples: number[];
+    statusRef?: StatusRef;
 }
 export declare const MessageSchema: import("mongoose").Schema<Message, import("mongoose").Model<Message, any, any, any, any, any, Message>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Message, Document<unknown, {}, Message, {
     id: string;
@@ -161,6 +204,15 @@ export declare const MessageSchema: import("mongoose").Schema<Message, import("m
         id: string;
     }> | undefined;
     waveformSamples?: import("mongoose").SchemaDefinitionProperty<number[], Message, Document<unknown, {}, Message, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Message & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    statusRef?: import("mongoose").SchemaDefinitionProperty<StatusRef | undefined, Message, Document<unknown, {}, Message, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Message & {
         _id: Types.ObjectId;

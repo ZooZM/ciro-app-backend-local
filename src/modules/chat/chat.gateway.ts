@@ -7,9 +7,16 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
+import { OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { Inject, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Inject,
+  Logger,
+  UsePipes,
+  ValidationPipe,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Redis } from 'ioredis';
 import { AccessToken } from 'livekit-server-sdk';
@@ -25,6 +32,9 @@ import { MessagesRepository } from './messages.repository';
 import { CHAT_CONFIG } from './chat.config';
 import { PushService } from '../notifications/push.service';
 import { ChatRoomsRepository } from './chat-rooms.repository';
+import { StatusService } from '../status/status.service';
+import { CreateStatusDto } from '../status/dto/create-status.dto';
+import { LocationBatchService } from '../map/location-batch.service';
 
 interface AuthenticatedSocket extends Socket {
   user?: { userId: string; phoneNumber: string };
@@ -33,19 +43,24 @@ interface AuthenticatedSocket extends Socket {
 @WebSocketGateway({
   cors: { origin: '*' }, // Rely on strict app config typically, simplified for WS
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+{
   @WebSocketServer()
   server: Server;
 
   private activeSockets = new Map<string, AuthenticatedSocket>();
   private activeCalls = new Map<string, string>(); // userId -> partnerId (1-on-1 calls)
   // FR-038: extended to track recorders, start time and call type (data-model.md §3a)
-  private activeGroupCalls = new Map<string, {
-    participants: Set<string>;
-    recorders: Set<string>;
-    startedAt: Date;
-    isVideo: boolean;
-  }>();
+  private activeGroupCalls = new Map<
+    string,
+    {
+      participants: Set<string>;
+      recorders: Set<string>;
+      startedAt: Date;
+      isVideo: boolean;
+    }
+  >();
   private userRoomIds = new Map<string, string[]>(); // userId -> roomIds (cached for disconnect broadcast)
   // FR-012: tracks which chatRoomId each userId is actively sharing in (for disconnect cleanup)
   private userScreenShares = new Map<string, string>(); // userId -> chatRoomId
@@ -61,7 +76,29 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private pushService: PushService,
     private chatRoomsRepository: ChatRoomsRepository,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
-  ) { }
+    @Inject(forwardRef(() => StatusService))
+    private statusService: StatusService,
+    @Inject(forwardRef(() => LocationBatchService))
+    private locationBatchService: LocationBatchService,
+  ) {}
+
+  /** 018-snap-map-realtime (FR-006a): batched fan-out reuses the room channels presence already targets. */
+  onModuleInit() {
+    this.locationBatchService.onFlush((roomId, updates) => {
+      this.server.to(roomId).emit('locationUpdate', { updates });
+    });
+  }
+
+  /** Public accessor so MapService/MapGateway-adjacent code can target the same room channels presence uses. */
+  getUserRoomIds(userId: string): string[] {
+    return this.userRoomIds.get(userId) ?? [];
+  }
+
+  /** Public accessor so MapService can drop `userId`'s not-yet-flushed batch
+   * entry when hiding their marker (Ghost Mode) — see LocationBatchService.cancel. */
+  cancelPendingLocationUpdates(userId: string): void {
+    this.locationBatchService.cancel(userId);
+  }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -82,7 +119,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // --- 2. Auto-join ALL of the user's rooms on connect (WhatsApp-style) ---
       // Fetch all chat rooms the user is a participant in from MongoDB
-      const userRooms = await this.chatService.getUserRoomsForSocket(client.user.userId);
+      const userRooms = await this.chatService.getUserRoomsForSocket(
+        client.user.userId,
+      );
 
       const roomIds = userRooms.map((room) => room._id.toString());
       // Personal user-room so the server can target a specific user with events
@@ -136,7 +175,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         joinedRooms: roomIds,
       });
     } catch (error) {
-      this.logger.warn(`[WS REJECTED] Socket: ${client.id} | Reason: ${error.message}`);
+      this.logger.warn(
+        `[WS REJECTED] Socket: ${client.id} | Reason: ${error.message}`,
+      );
       client.disconnect();
     }
   }
@@ -181,7 +222,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // --- T005/FR-012: Clean up screen share lock on disconnect ---
       await this._handleScreenShareDisconnect(client.user.userId);
     }
-    this.logger.log(`[WS DISCONNECTED] Socket: ${client.id} | User: ${client.user?.userId ?? 'unauthenticated'}`);
+    this.logger.log(
+      `[WS DISCONNECTED] Socket: ${client.id} | User: ${client.user?.userId ?? 'unauthenticated'}`,
+    );
   }
 
   /**
@@ -195,8 +238,48 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (!client.user) return;
     await client.join(roomId);
-    this.logger.log(`User ${client.user.userId} manually joined room ${roomId}`);
+    this.logger.log(
+      `User ${client.user.userId} manually joined room ${roomId}`,
+    );
     return { event: 'joinedRoom', data: roomId };
+  }
+
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @SubscribeMessage('uploadStatus')
+  async handleUploadStatus(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: CreateStatusDto,
+  ) {
+    if (!client.user) return;
+
+    try {
+      const { status } = await this.statusService.createStatus(
+        client.user.userId,
+        payload,
+      );
+      client.emit('statusUploaded', {
+        clientStatusId: status.clientStatusId,
+        id: status.id,
+        createdAt: status.createdAt,
+      });
+    } catch (e) {
+      this.logger.error(`Upload Status Error: ${e.message}`);
+      client.emit('error', { message: e.message });
+    }
+  }
+
+  @SubscribeMessage('statusViewed')
+  async handleStatusViewed(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody('statusId') statusId: string,
+  ) {
+    if (!client.user || !statusId) return;
+
+    try {
+      await this.statusService.recordView(statusId, client.user.userId);
+    } catch (e) {
+      this.logger.error(`Status Viewed Error: ${e.message}`);
+    }
   }
 
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -212,7 +295,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       console.log('🚀 Payload received from Flutter:', payload);
 
-      const { message, isNew } = await this.chatService.saveMessage(user.userId, payload);
+      const { message, isNew } = await this.chatService.saveMessage(
+        user.userId,
+        payload,
+      );
 
       // ── Always ACK the sender ────────────────────────────────────────────────
       // Emit messageSent regardless of whether the message is new or a duplicate.
@@ -220,7 +306,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // needs this confirmation to promote the message from pending → sent.
       client.emit('messageSent', {
         clientMessageId: payload.clientMessageId,
-        createdAt: (message as any).createdAt
+        createdAt: (message as any).createdAt,
       });
 
       // ── Only broadcast on first delivery ─────────────────────────────────────
@@ -230,23 +316,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.broadcast.to(payload.chatRoomId).emit('newMessage', message);
 
         // Notify participants who are not currently connected via push.
-        const room = await this.chatRoomsRepository.findById(payload.chatRoomId);
+        const room = await this.chatRoomsRepository.findById(
+          payload.chatRoomId,
+        );
         if (room) {
           for (const participantId of room.participants as any[]) {
             const id = participantId.toString();
             if (id !== client.user.userId && !this.activeSockets.has(id)) {
-              this.pushService.notifyOfflineUser(id, {
-                content: (message as any).content ?? '',
-                senderName: client.user.phoneNumber,
-                roomId: payload.chatRoomId,
-              }).catch(() => {});
+              this.pushService
+                .notifyOfflineUser(id, {
+                  content: (message as any).content ?? '',
+                  senderName: client.user.phoneNumber,
+                  roomId: payload.chatRoomId,
+                })
+                .catch(() => {});
             }
           }
         }
       } else {
-        console.log(`⚡ Duplicate suppressed for clientMessageId: ${payload.clientMessageId}`);
+        console.log(
+          `⚡ Duplicate suppressed for clientMessageId: ${payload.clientMessageId}`,
+        );
       }
-
     } catch (e) {
       console.error('Send Message Error:', e.message);
       client.emit('error', { message: e.message });
@@ -269,6 +360,66 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * 018-snap-map-realtime (FR-006/FR-006a): persists immediately, then
+   * enqueues into the batch accumulator for authorized room channels — the
+   * gateway does NOT re-emit each event instantly (thundering-herd guard,
+   * SC-012). Ghost-mode users persist but are never enqueued for fan-out.
+   */
+  @SubscribeMessage('shareLocation')
+  async handleShareLocation(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { longitude: number; latitude: number },
+  ) {
+    if (!client.user) return;
+    const userId = client.user.userId;
+    const longitude = Number(payload?.longitude);
+    const latitude = Number(payload?.latitude);
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+
+    const lastUpdatedAt = await this.usersService.updateLocation(
+      userId,
+      longitude,
+      latitude,
+    );
+
+    const isGhost = await this.usersService.isGhostMode(userId);
+    if (isGhost) return;
+
+    const roomIds = this.userRoomIds.get(userId) ?? [];
+    for (const roomId of roomIds) {
+      this.locationBatchService.enqueue(roomId, userId, {
+        userId,
+        longitude,
+        latitude,
+        isOnline: true,
+        lastUpdatedAt: lastUpdatedAt.toISOString(),
+      });
+    }
+  }
+
+  /**
+   * 018-snap-map-realtime: the explicit "Stop Sharing" action. Distinct from
+   * Ghost Mode (a standing preference) — this excludes the user from
+   * Following-tab queries going forward AND immediately tells already-open
+   * viewers to drop the marker, rather than leaving it visible (stale) until
+   * their next REST refresh or the 2h TTL sweep.
+   */
+  @SubscribeMessage('stopSharingLocation')
+  async handleStopSharingLocation(@ConnectedSocket() client: AuthenticatedSocket) {
+    if (!client.user) return;
+    const userId = client.user.userId;
+    await this.usersService.setSharingLocation(userId, false);
+    // Drop any update enqueued moments ago but not yet flushed — otherwise
+    // it flushes right after this and resurrects the marker we just hid.
+    this.locationBatchService.cancel(userId);
+
+    const roomIds = this.userRoomIds.get(userId) ?? [];
+    for (const roomId of roomIds) {
+      this.server.to(roomId).emit('locationHidden', { userId });
+    }
+  }
+
+  /**
    * Used when a client physically receives the active packet to track 2 grey ticks.
    */
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -281,10 +432,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       console.log('🚀 Payload received from Flutter(markDelivered):', payload);
-      const idsToMark = payload.clientMessageIds ? payload.clientMessageIds : (payload.clientMessageId ? [payload.clientMessageId] : []);
+      const idsToMark = payload.clientMessageIds
+        ? payload.clientMessageIds
+        : payload.clientMessageId
+          ? [payload.clientMessageId]
+          : [];
       if (idsToMark.length === 0) return;
 
-      await this.chatService.markMessagesDelivered(client.user.userId, payload.chatRoomId, idsToMark);
+      await this.chatService.markMessagesDelivered(
+        client.user.userId,
+        payload.chatRoomId,
+        idsToMark,
+      );
 
       // Determine sender's identity. For now broadcast locally to everyone except this user but ideate targeted soon.
       // Wait, we need to find the specific sender's socket. In a 1-on-1 chat, the "other" person is the target.
@@ -293,7 +452,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         clientMessageIds: idsToMark,
         deliveredTo: client.user.userId,
       });
-
     } catch (e) {
       console.error('🛡️ Mark Delivered Error:', e.message);
     }
@@ -311,10 +469,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.user) return;
 
     try {
-      const idsToMark = payload.clientMessageIds ? payload.clientMessageIds : (payload.clientMessageId ? [payload.clientMessageId] : []);
+      const idsToMark = payload.clientMessageIds
+        ? payload.clientMessageIds
+        : payload.clientMessageId
+          ? [payload.clientMessageId]
+          : [];
       if (idsToMark.length === 0) return;
 
-      const counts = await this.chatService.markMessagesRead(client.user.userId, payload.chatRoomId, idsToMark);
+      const counts = await this.chatService.markMessagesRead(
+        client.user.userId,
+        payload.chatRoomId,
+        idsToMark,
+      );
 
       client.broadcast.to(payload.chatRoomId).emit('messageRead', {
         chatRoomId: payload.chatRoomId,
@@ -325,7 +491,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           participantCount: counts.participantCount,
         }),
       });
-
     } catch (e) {
       console.error('🛡️ Mark Read Error:', e.message);
     }
@@ -369,7 +534,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const caller = await this.usersService.findById(client.user.userId);
       if (!caller) throw new Error('Caller not found');
-      const targetUser = await this.usersService.findByPhoneNumber(payload.targetUserId);
+      const targetUser = await this.usersService.findByPhoneNumber(
+        payload.targetUserId,
+      );
 
       if (!targetUser) {
         client.emit('callError', { reason: 'user_not_found' });
@@ -385,11 +552,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           callerAvatar: '', // Set when user schema has an avatar
           isVideo: payload.isVideo,
         });
-        this.logger.log(`[Call] Call requested from ${client.user.userId} to ${payload.targetUserId}`);
+        this.logger.log(
+          `[Call] Call requested from ${client.user.userId} to ${payload.targetUserId}`,
+        );
       } else {
         // Target is offline
         client.emit('callError', { reason: 'target_offline' });
-        this.logger.log(`[Call] Call requested from ${client.user.userId} to ${payload.targetUserId} but target is offline`);
+        this.logger.log(
+          `[Call] Call requested from ${client.user.userId} to ${payload.targetUserId} but target is offline`,
+        );
       }
     } catch (e) {
       this.logger.warn(`[Call] requestCall error: ${e.message}`);
@@ -405,7 +576,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.user) return;
 
     // payload.callerId from frontend is currently the phone number due to incomingCall payload structure
-    const callerUser = await this.usersService.findByPhoneNumber(payload.callerId);
+    const callerUser = await this.usersService.findByPhoneNumber(
+      payload.callerId,
+    );
     if (!callerUser) {
       client.emit('callError', { reason: 'caller_not_found' });
       return;
@@ -430,13 +603,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const callerToken = new AccessToken(apiKey, apiSecret, {
       identity: callerDbId,
     });
-    callerToken.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+    callerToken.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
 
     // Create token for receiver (the one who accepted)
     const receiverToken = new AccessToken(apiKey, apiSecret, {
       identity: receiverDbId,
     });
-    receiverToken.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+    receiverToken.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
 
     if (callerSocket) {
       // Notify caller
@@ -456,7 +639,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       livekitToken: await receiverToken.toJwt(),
     });
 
-    this.logger.log(`[Call] User ${receiverDbId} accepted call from ${callerDbId}. Room: ${roomName}`);
+    this.logger.log(
+      `[Call] User ${receiverDbId} accepted call from ${callerDbId}. Room: ${roomName}`,
+    );
   }
 
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -467,7 +652,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (!client.user) return;
 
-    const callerUser = await this.usersService.findByPhoneNumber(payload.callerId);
+    const callerUser = await this.usersService.findByPhoneNumber(
+      payload.callerId,
+    );
     if (!callerUser) return;
 
     const callerSocket = this.activeSockets.get(callerUser._id.toString());
@@ -475,7 +662,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Notify caller
       callerSocket.emit('callRejected', { receiverId: client.user.userId });
     }
-    this.logger.log(`[Call] User ${client.user.userId} rejected call from ${callerUser._id.toString()}`);
+    this.logger.log(
+      `[Call] User ${client.user.userId} rejected call from ${callerUser._id.toString()}`,
+    );
   }
 
   @SubscribeMessage('endCall')
@@ -512,7 +701,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.user) return;
     const { chatRoomId, isVideo } = payload;
 
-    const room = await this.chatRoomsRepository.findOne({ _id: chatRoomId, participants: client.user.userId });
+    const room = await this.chatRoomsRepository.findOne({
+      _id: chatRoomId,
+      participants: client.user.userId,
+    });
     if (!room) {
       client.emit('callError', { reason: 'not_a_participant' });
       return;
@@ -573,7 +765,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       identity: client.user.userId,
       name: client.user.phoneNumber,
     });
-    callerToken.addGrant({ roomJoin: true, room: chatRoomId, canPublish: true, canSubscribe: true });
+    callerToken.addGrant({
+      roomJoin: true,
+      room: chatRoomId,
+      canPublish: true,
+      canSubscribe: true,
+    });
     const livekitToken = await callerToken.toJwt();
 
     client.emit('callAccepted', {
@@ -584,7 +781,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       currentRecorders: [],
     });
 
-    this.logger.log(`[GroupCall] requestGroupCall room=${chatRoomId} by ${client.user.userId}`);
+    this.logger.log(
+      `[GroupCall] requestGroupCall room=${chatRoomId} by ${client.user.userId}`,
+    );
   }
 
   /** T046 — Invited member accepts; receives LiveKit token + participant list. */
@@ -618,7 +817,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       identity: client.user.userId,
       name: client.user.phoneNumber,
     });
-    token.addGrant({ roomJoin: true, room: chatRoomId, canPublish: true, canSubscribe: true });
+    token.addGrant({
+      roomJoin: true,
+      room: chatRoomId,
+      canPublish: true,
+      canSubscribe: true,
+    });
     const livekitToken = await token.toJwt();
 
     // T089: include currentRecorders so late joiners can render the REC banner (RD-5)
@@ -643,7 +847,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
 
-    this.logger.log(`[GroupCall] acceptGroupCall room=${chatRoomId} by ${client.user.userId}`);
+    this.logger.log(
+      `[GroupCall] acceptGroupCall room=${chatRoomId} by ${client.user.userId}`,
+    );
   }
 
   /** T047 — Member declines the invitation; no broadcast to others. */
@@ -653,7 +859,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: { chatRoomId: string },
   ) {
     if (!client.user) return;
-    this.logger.log(`[GroupCall] declineGroupCall room=${payload.chatRoomId} by ${client.user.userId}`);
+    this.logger.log(
+      `[GroupCall] declineGroupCall room=${payload.chatRoomId} by ${client.user.userId}`,
+    );
     // No broadcast required; caller doesn't get notified on individual declines
   }
 
@@ -671,7 +879,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('groupCallRecordingStateChanged')
   handleGroupCallRecordingStateChanged(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() payload: { chatRoomId: string; isRecording: boolean; hasVideo?: boolean },
+    @MessageBody()
+    payload: { chatRoomId: string; isRecording: boolean; hasVideo?: boolean },
   ) {
     if (!client.user) return;
     const { chatRoomId, isRecording, hasVideo = false } = payload;
@@ -721,7 +930,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const lastId = callEntry.participants.values().next().value as string;
       const lastSocket = this.activeSockets.get(lastId);
       if (lastSocket) {
-        lastSocket.emit('callEnded', { chatRoomId, reason: 'last-participant' });
+        lastSocket.emit('callEnded', {
+          chatRoomId,
+          reason: 'last-participant',
+        });
       }
       this.activeGroupCalls.delete(chatRoomId);
       // Broadcast groupCallEnded to the entire room channel (FR-038)
@@ -737,7 +949,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
 
-    this.logger.log(`[GroupCall] ${userId} left group call room=${chatRoomId}. Remaining: ${callEntry.participants.size}`);
+    this.logger.log(
+      `[GroupCall] ${userId} left group call room=${chatRoomId}. Remaining: ${callEntry.participants.size}`,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -748,7 +962,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('screenShareStateChanged')
   async handleScreenShareStateChanged(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() payload: {
+    @MessageBody()
+    payload: {
       chatRoomId: string;
       userId: string;
       userName: string;
@@ -769,21 +984,36 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (result === 'OK') {
         // Lock acquired — re-broadcast to other sockets and ACK emitter
         this.userScreenShares.set(userId, chatRoomId);
-        client.broadcast.to(chatRoomId).emit('screenShareStateChanged', { chatRoomId, userId, userName, isSharing, withAudio });
+        client.broadcast.to(chatRoomId).emit('screenShareStateChanged', {
+          chatRoomId,
+          userId,
+          userName,
+          isSharing,
+          withAudio,
+        });
         client.emit('screenShareAccepted', { chatRoomId });
-        this.logger.log(`[ScreenShare] ${userId} started sharing in room ${chatRoomId}`);
+        this.logger.log(
+          `[ScreenShare] ${userId} started sharing in room ${chatRoomId}`,
+        );
       } else {
         // Lock conflict — inform only the rejected emitter (FR-012)
-        const activeSharerUserId = await this.redis.get(lockKey) ?? '';
-        const activeSharer = activeSharerUserId ? await this.usersService.findById(activeSharerUserId) : null;
-        const activeSharerName: string = (activeSharer as any)?.name ?? (activeSharer as any)?.phoneNumber ?? '';
+        const activeSharerUserId = (await this.redis.get(lockKey)) ?? '';
+        const activeSharer = activeSharerUserId
+          ? await this.usersService.findById(activeSharerUserId)
+          : null;
+        const activeSharerName: string =
+          (activeSharer as any)?.name ??
+          (activeSharer as any)?.phoneNumber ??
+          '';
         client.emit('screenShareRejected', {
           chatRoomId,
           activeSharerUserId,
           activeSharerName,
           reason: 'another_user_sharing',
         });
-        this.logger.log(`[ScreenShare] Conflict: ${userId} tried to share in room ${chatRoomId}, blocked by ${activeSharerUserId}`);
+        this.logger.log(
+          `[ScreenShare] Conflict: ${userId} tried to share in room ${chatRoomId}, blocked by ${activeSharerUserId}`,
+        );
       }
     } else {
       // Stop share — verify ownership before releasing lock
@@ -791,8 +1021,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (currentSharer === userId) {
         await this.redis.del(lockKey);
         this.userScreenShares.delete(userId);
-        client.broadcast.to(chatRoomId).emit('screenShareStateChanged', { chatRoomId, userId, userName, isSharing, withAudio });
-        this.logger.log(`[ScreenShare] ${userId} stopped sharing in room ${chatRoomId}`);
+        client.broadcast.to(chatRoomId).emit('screenShareStateChanged', {
+          chatRoomId,
+          userId,
+          userName,
+          isSharing,
+          withAudio,
+        });
+        this.logger.log(
+          `[ScreenShare] ${userId} stopped sharing in room ${chatRoomId}`,
+        );
       }
     }
   }
@@ -813,7 +1051,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         isSharing: false,
         withAudio: false,
       });
-      this.logger.log(`[ScreenShare] Zombie lock cleared for ${userId} in room ${chatRoomId} (disconnect)`);
+      this.logger.log(
+        `[ScreenShare] Zombie lock cleared for ${userId} in room ${chatRoomId} (disconnect)`,
+      );
     }
     this.userScreenShares.delete(userId);
   }

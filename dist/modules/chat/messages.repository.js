@@ -37,16 +37,20 @@ let MessagesRepository = class MessagesRepository extends base_repository_1.Base
             .exec();
     }
     async markDelivered(messageIds, phoneNumber) {
-        await this.messageModel.updateMany({ clientMessageId: { $in: messageIds } }, {
+        await this.messageModel
+            .updateMany({ clientMessageId: { $in: messageIds } }, {
             $addToSet: { deliveredTo: phoneNumber },
             $set: { status: message_schema_1.MessageStatus.DELIVERED },
-        }).exec();
+        })
+            .exec();
     }
     async markRead(messageIds, phoneNumber) {
-        await this.messageModel.updateMany({ clientMessageId: { $in: messageIds } }, {
+        await this.messageModel
+            .updateMany({ clientMessageId: { $in: messageIds } }, {
             $addToSet: { readBy: phoneNumber, deliveredTo: phoneNumber },
             $set: { status: message_schema_1.MessageStatus.READ },
-        }).exec();
+        })
+            .exec();
     }
     async findByClientMessageId(clientMessageId) {
         return this.findOne({ clientMessageId });
@@ -60,12 +64,14 @@ let MessagesRepository = class MessagesRepository extends base_repository_1.Base
     }
     async softDelete(clientMessageId, requesterId, windowMinutes) {
         const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000);
-        return this.messageModel.findOneAndUpdate({
+        return this.messageModel
+            .findOneAndUpdate({
             clientMessageId,
             senderId: new mongoose_2.Types.ObjectId(requesterId),
             createdAt: { $gte: cutoff },
             isDeleted: false,
-        }, { $set: { isDeleted: true, content: '' } }, { new: true }).exec();
+        }, { $set: { isDeleted: true, content: '' } }, { new: true })
+            .exec();
     }
 };
 exports.MessagesRepository = MessagesRepository;

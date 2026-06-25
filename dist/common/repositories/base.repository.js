@@ -14,10 +14,12 @@ class BaseRepository {
         return this.model.findOne(filterQuery, projection).exec();
     }
     async findOneAndUpdate(filterQuery, updateQuery, options) {
-        return this.model.findOneAndUpdate(filterQuery, updateQuery, {
+        return this.model
+            .findOneAndUpdate(filterQuery, updateQuery, {
             new: true,
             ...options,
-        }).exec();
+        })
+            .exec();
     }
     async find(filterQuery, projection, options) {
         return this.model.find(filterQuery, projection, options).exec();

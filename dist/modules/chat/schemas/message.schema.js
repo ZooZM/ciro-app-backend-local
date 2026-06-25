@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MessageSchema = exports.Message = exports.MessageMetadata = exports.MessageStatus = exports.MessageType = void 0;
+exports.MessageSchema = exports.Message = exports.StatusRefSchema = exports.StatusRef = exports.MessageMetadata = exports.MessageStatus = exports.MessageType = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 var MessageType;
@@ -53,6 +53,28 @@ class MessageMetadata {
     thumbnailUrl;
 }
 exports.MessageMetadata = MessageMetadata;
+let StatusRef = class StatusRef {
+    statusId;
+    statusAuthorId;
+    expiresAt;
+};
+exports.StatusRef = StatusRef;
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Status', required: true }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], StatusRef.prototype, "statusId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', required: true }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], StatusRef.prototype, "statusAuthorId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Date, required: true }),
+    __metadata("design:type", Date)
+], StatusRef.prototype, "expiresAt", void 0);
+exports.StatusRef = StatusRef = __decorate([
+    (0, mongoose_1.Schema)({ _id: false })
+], StatusRef);
+exports.StatusRefSchema = mongoose_1.SchemaFactory.createForClass(StatusRef);
 let Message = class Message {
     chatRoomId;
     senderId;
@@ -66,6 +88,7 @@ let Message = class Message {
     readBy;
     isDeleted;
     waveformSamples;
+    statusRef;
 };
 exports.Message = Message;
 __decorate([
@@ -101,7 +124,11 @@ __decorate([
     __metadata("design:type", MessageMetadata)
 ], Message.prototype, "metadata", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, enum: Object.values(MessageStatus), default: MessageStatus.SENT }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: Object.values(MessageStatus),
+        default: MessageStatus.SENT,
+    }),
     __metadata("design:type", String)
 ], Message.prototype, "status", void 0);
 __decorate([
@@ -120,9 +147,17 @@ __decorate([
     (0, mongoose_1.Prop)({ type: [Number], default: [] }),
     __metadata("design:type", Array)
 ], Message.prototype, "waveformSamples", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: exports.StatusRefSchema, required: false }),
+    __metadata("design:type", StatusRef)
+], Message.prototype, "statusRef", void 0);
 exports.Message = Message = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Message);
 exports.MessageSchema = mongoose_1.SchemaFactory.createForClass(Message);
 exports.MessageSchema.index({ chatRoomId: 1, _id: -1 });
+exports.MessageSchema.index({ 'statusRef.expiresAt': 1 }, {
+    expireAfterSeconds: 0,
+    partialFilterExpression: { statusRef: { $exists: true } },
+});
 //# sourceMappingURL=message.schema.js.map

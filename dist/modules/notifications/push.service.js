@@ -90,6 +90,16 @@ let PushService = PushService_1 = class PushService {
             });
         }
     }
+    async notifyStatusReaction(userId, message) {
+        const tokens = await this.deviceTokensRepository.getTokens(userId);
+        for (const doc of tokens) {
+            await this.sendPush(doc.token, {
+                title: message.reactorName || 'Someone',
+                body: 'loved your status',
+                data: { type: 'statusReaction', statusId: message.statusId },
+            });
+        }
+    }
 };
 exports.PushService = PushService;
 exports.PushService = PushService = PushService_1 = __decorate([

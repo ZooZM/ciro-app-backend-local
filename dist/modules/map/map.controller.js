@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const map_service_1 = require("./map.service");
 const update_location_dto_1 = require("./dto/update-location.dto");
 const nearby_users_dto_1 = require("./dto/nearby-users.dto");
+const set_ghost_mode_dto_1 = require("./dto/set-ghost-mode.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 let MapController = class MapController {
     mapService;
@@ -34,6 +35,29 @@ let MapController = class MapController {
         const { longitude, latitude, radius } = query;
         const users = await this.mapService.getNearbyUsers(userId, longitude, latitude, radius || 10);
         return { users };
+    }
+    async getVisibleUsers(req) {
+        const { userId } = req.user;
+        const users = await this.mapService.getVisibleUsers(userId);
+        return { users };
+    }
+    async getExploreUsers(req) {
+        const { userId } = req.user;
+        const users = await this.mapService.getExploreUsers(userId);
+        return { users };
+    }
+    async getGroups(req) {
+        const { userId } = req.user;
+        const groups = await this.mapService.getGroups(userId);
+        return { groups };
+    }
+    async setGhostMode(req, dto) {
+        const { userId } = req.user;
+        return this.mapService.setGhostMode(userId, dto.enabled);
+    }
+    async getGhostMode(req) {
+        const { userId } = req.user;
+        return this.mapService.getGhostMode(userId);
     }
 };
 exports.MapController = MapController;
@@ -53,6 +77,42 @@ __decorate([
     __metadata("design:paramtypes", [Object, nearby_users_dto_1.NearbyUsersDto]),
     __metadata("design:returntype", Promise)
 ], MapController.prototype, "getNearbyUsers", null);
+__decorate([
+    (0, common_1.Get)('visible'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], MapController.prototype, "getVisibleUsers", null);
+__decorate([
+    (0, common_1.Get)('explore'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], MapController.prototype, "getExploreUsers", null);
+__decorate([
+    (0, common_1.Get)('groups'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], MapController.prototype, "getGroups", null);
+__decorate([
+    (0, common_1.Patch)('ghost-mode'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, set_ghost_mode_dto_1.SetGhostModeDto]),
+    __metadata("design:returntype", Promise)
+], MapController.prototype, "setGhostMode", null);
+__decorate([
+    (0, common_1.Get)('ghost-mode'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], MapController.prototype, "getGhostMode", null);
 exports.MapController = MapController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('map'),

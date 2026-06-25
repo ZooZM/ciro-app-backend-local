@@ -1,4 +1,10 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -15,10 +21,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      
+
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      } else if (
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null
+      ) {
         // Typical structure from NestJS ValidationPipe errors
         message = (exceptionResponse as any).message || exception.message;
         errorType = (exceptionResponse as any).error || exception.name;
@@ -26,7 +35,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof Error) {
       // Unhandled errors (e.g. DB disconnects, logic flaws)
       // DO NOT expose exception details directly to the client in Prod.
-      message = 'An unexpected error occurred'; 
+      message = 'An unexpected error occurred';
       errorType = 'UnexpectedError';
       // In production, log the exact `exception.stack` to a centralized logger here!
       console.error(`[CRITICAL ERROR] ${request.url}`, exception);

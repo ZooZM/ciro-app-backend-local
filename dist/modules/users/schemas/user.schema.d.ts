@@ -13,7 +13,7 @@ export declare enum SubscriptionStatus {
 export declare class Subscription {
     tier: string;
     status: string;
-    translationMinutesBalance: number;
+    translationSecondsBalance: number;
     expiresAt?: Date;
     paymentCustomerId?: string;
 }
@@ -31,8 +31,13 @@ export declare class User {
     refreshToken?: string;
     isOnline: boolean;
     location?: Location;
+    locationUpdatedAt?: Date;
+    isGhostMode: boolean;
+    isSharingLocation: boolean;
     subscription: Subscription;
     blockedUsers: Types.ObjectId[];
+    syncedContacts: string[];
+    defaultStatusAudience: Types.ObjectId[];
 }
 export declare const UserSchema: import("mongoose").Schema<User, import("mongoose").Model<User, any, any, any, any, any, User>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, User, Document<unknown, {}, User, {
     id: string;
@@ -124,6 +129,33 @@ export declare const UserSchema: import("mongoose").Schema<User, import("mongoos
     }, "id"> & {
         id: string;
     }> | undefined;
+    locationUpdatedAt?: import("mongoose").SchemaDefinitionProperty<Date | undefined, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    isGhostMode?: import("mongoose").SchemaDefinitionProperty<boolean, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    isSharingLocation?: import("mongoose").SchemaDefinitionProperty<boolean, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
     subscription?: import("mongoose").SchemaDefinitionProperty<Subscription, User, Document<unknown, {}, User, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
@@ -134,6 +166,24 @@ export declare const UserSchema: import("mongoose").Schema<User, import("mongoos
         id: string;
     }> | undefined;
     blockedUsers?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId[], User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    syncedContacts?: import("mongoose").SchemaDefinitionProperty<string[], User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    defaultStatusAudience?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId[], User, Document<unknown, {}, User, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
         _id: Types.ObjectId;

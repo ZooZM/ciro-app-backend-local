@@ -1,4 +1,13 @@
-import { Controller, Post, Delete, Body, HttpCode, HttpStatus, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Delete,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -51,7 +60,11 @@ export class AuthController {
     @Request() req: any,
     @Body() dto: { token: string; platform: 'fcm' | 'apns' },
   ) {
-    await this.deviceTokensRepository.upsertToken(req.user.userId, dto.token, dto.platform);
+    await this.deviceTokensRepository.upsertToken(
+      req.user.userId,
+      dto.token,
+      dto.platform,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

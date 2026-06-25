@@ -20,6 +20,10 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google-cloud/speech": "^7.3.2",
+    "@google-cloud/translate": "^9.4.2",
+    "@livekit/agents": "^1.4.5",
+    "@livekit/rtc-node": "^0.13.29",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.1",
