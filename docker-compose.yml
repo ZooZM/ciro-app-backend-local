@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   app:
     build:
@@ -7,19 +9,21 @@ services:
     container_name: chat-app-backend
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '3008:3000' # Expose port 3008 on the host, mapped to 3000 inside the container
     env_file:
       - .env
     environment:
-      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME:-chatapp}?authSource=admin
-      REDIS_URL: redis://redis:6379
+      # Connect to MongoDB and Redis via Docker service names on the internal network
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@chat-mongo:27017/${MONGO_DB_NAME}?authSource=admin
+      REDIS_URL: redis://chat-redis:6379
     depends_on:
-      mongodb:
+      chat-mongo:
         condition: service_healthy
-      redis:
+      chat-redis:
         condition: service_healthy
     volumes:
-      - uploads_data:/app/uploads
+      # Bind existing server uploads directory so old and new files persist
+      - /var/www/html/ciro-chat-backend/uploads:/app/uploads
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
       interval: 30s
@@ -29,16 +33,17 @@ services:
     networks:
       - chat-net
 
-  mongodb:
+  chat-mongo: # Renamed to avoid conflict with the old local setup
     image: mongo:8
     container_name: chat-mongo
     restart: unless-stopped
+    # No host ports exposed; runs only on the Docker network (avoids conflict with host port 27017)
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-chatapp}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
     volumes:
-      - mongodb_data:/data/db
+      - ciro_mongodb_data:/data/db # Dedicated volume for chat MongoDB data
     healthcheck:
       test:
         - CMD
@@ -59,13 +64,13 @@ services:
     networks:
       - chat-net
 
-  redis:
+  chat-redis:
     image: redis:7-alpine
     container_name: chat-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - ciro_redis_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -75,9 +80,8 @@ services:
       - chat-net
 
 volumes:
-  mongodb_data:
-  redis_data:
-  uploads_data:
+  ciro_mongodb_data:
+  ciro_redis_data:
 
 networks:
   chat-net:

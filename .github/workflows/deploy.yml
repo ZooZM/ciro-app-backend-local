@@ -1,0 +1,39 @@
+name: Deploy NestJS App to VPS via Docker
+
+on:
+  push:
+    branches:
+      - main  # Runs automatically on push to main
+  workflow_dispatch: # Allows manually triggering the workflow from GitHub
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Executing remote ssh commands to deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 15m # Increased to 15 minutes because Docker build takes longer
+          script: |
+            cd /var/www/html/ciro-chat-backend
+            
+            echo "Pulling latest changes from Git..."
+            git pull origin main
+            
+            echo "Building and deploying containers via Docker Compose..."
+            # Rebuilds and restarts only the app container without stopping MongoDB and Redis
+            docker compose up -d --build app
+            
+            echo "Cleaning up unused Docker images to save space..."
+            # Remove old dangling images to free disk space on the server
+            docker image prune -f
+            
+            echo "Deployment finished successfully!"
