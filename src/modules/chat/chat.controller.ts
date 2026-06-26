@@ -74,10 +74,19 @@ export class ChatController {
     @Request() req: any,
     @Body() dto: ResolvePrivateChatDto,
   ) {
-    const { roomId, room } = await this.chatService.resolvePrivateRoom(
-      req.user.userId,
-      dto.userId,
-    );
+    const { roomId, room, isNew, targetId } =
+      await this.chatService.resolvePrivateRoom(req.user.userId, dto.userId);
+
+    // Notify the other participant so their socket joins the room and their
+    // chat list updates immediately — without this, the first message sent
+    // into a brand-new room has no subscriber on the receiving end and only
+    // arrives once they separately refresh/reconnect.
+    if (isNew) {
+      await this.chatGateway.broadcastNewChatRoom([targetId], roomId, {
+        room,
+      });
+    }
+
     return { roomId, room };
   }
 
