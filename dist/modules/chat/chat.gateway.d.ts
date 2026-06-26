@@ -1,4 +1,5 @@
 import { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import { OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -14,13 +15,16 @@ import { RejectCallDto } from './dto/reject-call.dto';
 import { MessagesRepository } from './messages.repository';
 import { PushService } from '../notifications/push.service';
 import { ChatRoomsRepository } from './chat-rooms.repository';
+import { StatusService } from '../status/status.service';
+import { CreateStatusDto } from '../status/dto/create-status.dto';
+import { LocationBatchService } from '../map/location-batch.service';
 interface AuthenticatedSocket extends Socket {
     user?: {
         userId: string;
         phoneNumber: string;
     };
 }
-export declare class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export declare class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
     private jwtService;
     private chatService;
     private usersService;
@@ -29,6 +33,8 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
     private pushService;
     private chatRoomsRepository;
     private readonly redis;
+    private statusService;
+    private locationBatchService;
     server: Server;
     private activeSockets;
     private activeCalls;
@@ -36,18 +42,28 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
     private userRoomIds;
     private userScreenShares;
     private readonly logger;
-    constructor(jwtService: JwtService, chatService: ChatService, usersService: UsersService, configService: ConfigService, messagesRepository: MessagesRepository, pushService: PushService, chatRoomsRepository: ChatRoomsRepository, redis: Redis);
+    constructor(jwtService: JwtService, chatService: ChatService, usersService: UsersService, configService: ConfigService, messagesRepository: MessagesRepository, pushService: PushService, chatRoomsRepository: ChatRoomsRepository, redis: Redis, statusService: StatusService, locationBatchService: LocationBatchService);
+    onModuleInit(): void;
+    getUserRoomIds(userId: string): string[];
+    cancelPendingLocationUpdates(userId: string): void;
     handleConnection(client: AuthenticatedSocket): Promise<void>;
     handleDisconnect(client: AuthenticatedSocket): Promise<void>;
     handleJoinRoom(client: AuthenticatedSocket, roomId: string): Promise<{
         event: string;
         data: string;
     } | undefined>;
+    handleUploadStatus(client: AuthenticatedSocket, payload: CreateStatusDto): Promise<void>;
+    handleStatusViewed(client: AuthenticatedSocket, statusId: string): Promise<void>;
     handleSendMessage(client: AuthenticatedSocket, payload: SendMessageDto): Promise<void>;
     handleTyping(client: AuthenticatedSocket, payload: {
         roomId: string;
         isTyping: boolean;
     }): void;
+    handleShareLocation(client: AuthenticatedSocket, payload: {
+        longitude: number;
+        latitude: number;
+    }): Promise<void>;
+    handleStopSharingLocation(client: AuthenticatedSocket): Promise<void>;
     handleMarkDelivered(client: AuthenticatedSocket, payload: MarkDeliveredDto): Promise<void>;
     handleMarkRead(client: AuthenticatedSocket, payload: MarkReadDto): Promise<void>;
     handleDeleteForEveryone(client: AuthenticatedSocket, payload: {

@@ -20,10 +20,12 @@ export abstract class BaseRepository<T extends Document> {
     updateQuery: Record<string, any>,
     options?: any,
   ): Promise<T | null> {
-    return this.model.findOneAndUpdate(filterQuery, updateQuery, {
-      new: true,
-      ...options,
-    }).exec() as unknown as Promise<T | null>;
+    return this.model
+      .findOneAndUpdate(filterQuery, updateQuery, {
+        new: true,
+        ...options,
+      })
+      .exec() as unknown as Promise<T | null>;
   }
 
   async find(

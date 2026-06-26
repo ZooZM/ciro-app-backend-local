@@ -8,14 +8,51 @@ export declare class UsersService {
     findByEmail(email: string): Promise<UserDocument | null>;
     findById(id: string): Promise<UserDocument | null>;
     updateRefreshToken(id: string, refreshToken: string | null): Promise<void>;
-    updateLocation(userId: string, lng: number, lat: number): Promise<void>;
-    getNearbyUsers(userId: string, lng: number, lat: number, maxDistanceKm: number): Promise<(import("mongoose").Document<unknown, {}, UserDocument, {}, import("mongoose").DefaultSchemaOptions> & User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+    updateLocation(userId: string, lng: number, lat: number): Promise<Date>;
+    setSharingLocation(userId: string, enabled: boolean): Promise<void>;
+    getNearbyUsers(userId: string, lng: number, lat: number, maxDistanceKm: number, allowedUserIds: string[]): Promise<(User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
         __v: number;
-    } & {
-        id: string;
+    })[] | {
+        hasActiveStatus: boolean;
+        name: string;
+        phoneNumber: string;
+        email?: string;
+        password?: string;
+        isPhoneVerified: boolean;
+        fcmToken?: string;
+        refreshToken?: string;
+        isOnline: boolean;
+        location?: import("./schemas/user.schema").Location;
+        locationUpdatedAt?: Date;
+        isGhostMode: boolean;
+        isSharingLocation: boolean;
+        subscription: import("./schemas/user.schema").Subscription;
+        blockedUsers: import("mongoose").Types.ObjectId[];
+        syncedContacts: string[];
+        defaultStatusAudience: import("mongoose").Types.ObjectId[];
+        _id: import("mongoose").Types.ObjectId;
+        $locals: Record<string, unknown>;
+        $op: "save" | "validate" | "remove" | null;
+        $where: Record<string, unknown>;
+        baseModelName?: string;
+        collection: import("mongoose").Collection;
+        db: import("mongoose").Connection;
+        errors?: import("mongoose").Error.ValidationError;
+        isNew: boolean;
+        schema: import("mongoose").Schema;
+        __v: number;
+    }[]>;
+    setGhostMode(userId: string, enabled: boolean): Promise<void>;
+    isGhostMode(userId: string): Promise<boolean>;
+    getBlockedUserIds(userId: string): Promise<string[]>;
+    findManyByIds(ids: string[]): Promise<(User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        _id: import("mongoose").Types.ObjectId;
+    }> & {
+        __v: number;
     })[]>;
-    syncContacts(phoneNumbers: string[]): Promise<Partial<UserDocument>[]>;
+    syncContacts(userId: string, phoneNumbers: string[]): Promise<Partial<UserDocument>[]>;
+    findMutualContactIds(userId: string): Promise<import("mongoose").Types.ObjectId[]>;
     updateOnlineStatus(userId: string, isOnline: boolean): Promise<void>;
 }

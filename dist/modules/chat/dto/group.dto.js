@@ -24,7 +24,9 @@ __decorate([
 ], CreateGroupDto.prototype, "name", void 0);
 __decorate([
     (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayMinSize)(1, { message: 'A group must have at least 1 other participant.' }),
+    (0, class_validator_1.ArrayMinSize)(1, {
+        message: 'A group must have at least 1 other participant.',
+    }),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateGroupDto.prototype, "participants", void 0);

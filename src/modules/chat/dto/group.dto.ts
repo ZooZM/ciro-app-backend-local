@@ -19,7 +19,9 @@ export class CreateGroupDto {
    * Must have at least 1 other participant.
    */
   @IsArray()
-  @ArrayMinSize(1, { message: 'A group must have at least 1 other participant.' })
+  @ArrayMinSize(1, {
+    message: 'A group must have at least 1 other participant.',
+  })
   @IsString({ each: true })
   participants: string[];
 

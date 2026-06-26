@@ -23,7 +23,7 @@ let UsersController = class UsersController {
         this.usersService = usersService;
     }
     async syncContacts(req, dto) {
-        const registeredContacts = await this.usersService.syncContacts(dto.phoneNumbers);
+        const registeredContacts = await this.usersService.syncContacts(req.user.userId, dto.phoneNumbers);
         return {
             message: `Found ${registeredContacts.length} registered contact(s).`,
             data: registeredContacts,

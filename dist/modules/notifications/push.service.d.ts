@@ -15,4 +15,8 @@ export declare class PushService implements OnModuleInit {
         senderName?: string;
         roomId: string;
     }): Promise<void>;
+    notifyStatusReaction(userId: string, message: {
+        reactorName: string;
+        statusId: string;
+    }): Promise<void>;
 }

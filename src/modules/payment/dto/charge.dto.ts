@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsEnum, IsNumber, ValidateIf, Length, IsEmail, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsNumber,
+  ValidateIf,
+  Length,
+  IsEmail,
+  IsOptional,
+} from 'class-validator';
 
 export enum PaymentMethod {
   CARD = 'CARD',

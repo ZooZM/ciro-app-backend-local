@@ -148,7 +148,9 @@ let PaymentService = PaymentService_1 = class PaymentService {
             this.logger.log(`Idempotency verification: Order ${order_id} is already marked as SUCCESS.`);
             return { status: 'already_processed' };
         }
-        if (order_status === 'APPROVED' || order_status === 'SUCCESS' || order_status === 'SETTLED') {
+        if (order_status === 'APPROVED' ||
+            order_status === 'SUCCESS' ||
+            order_status === 'SETTLED') {
             order.status = 'SUCCESS';
         }
         else if (order_status === 'DECLINED') {

@@ -41,7 +41,11 @@ describe('VideoService', () => {
 
   describe('generateRoomToken', () => {
     it('should generate a token for the user and room', async () => {
-      const token = await service.generateRoomToken('user-123', 'John Doe', 'room-abc');
+      const token = await service.generateRoomToken(
+        'user-123',
+        'John Doe',
+        'room-abc',
+      );
       expect(token).toBe('mock-livekit-token');
       expect(configService.get).toHaveBeenCalledWith('LIVEKIT_API_KEY');
       expect(configService.get).toHaveBeenCalledWith('LIVEKIT_API_SECRET');

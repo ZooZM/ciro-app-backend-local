@@ -44,12 +44,18 @@ let ChatService = class ChatService {
         }
         let room = await this.chatRoomsRepository.findPrivateRoom(requesterId, targetId);
         if (!room) {
-            const participants = [new mongoose_1.Types.ObjectId(requesterId), new mongoose_1.Types.ObjectId(targetId)];
-            room = await this.chatRoomsRepository.create({ type: chat_room_schema_1.ChatRoomType.PRIVATE, participants });
+            const participants = [
+                new mongoose_1.Types.ObjectId(requesterId),
+                new mongoose_1.Types.ObjectId(targetId),
+            ];
+            room = await this.chatRoomsRepository.create({
+                type: chat_room_schema_1.ChatRoomType.PRIVATE,
+                participants,
+            });
         }
         return { roomId: room._id.toString(), room };
     }
-    async saveMessage(senderId, payload) {
+    async saveMessage(senderId, payload, extra) {
         const room = await this.chatRoomsRepository.findById(payload.chatRoomId);
         if (!room)
             throw new common_1.NotFoundException('Chat room not found');
@@ -67,6 +73,7 @@ let ChatService = class ChatService {
             messageType: payload.type ?? message_schema_1.MessageType.TEXT,
             fileUrl: payload.fileUrl,
             metadata: payload.metadata,
+            ...(extra?.statusRef && { statusRef: extra.statusRef }),
         });
         await this.chatRoomsRepository.updateLastMessage(payload.chatRoomId, savedMessage._id.toString());
         const populated = await savedMessage.populate('senderId', 'name phoneNumber');
@@ -103,7 +110,9 @@ let ChatService = class ChatService {
         }
         await this.messagesRepository.markRead(messageIds, userId);
         if (room.type === chat_room_schema_1.ChatRoomType.GROUP) {
-            const msg = await this.messagesRepository.findOne({ clientMessageId: messageIds[0] });
+            const msg = await this.messagesRepository.findOne({
+                clientMessageId: messageIds[0],
+            });
             const readByCount = msg ? (msg.readBy?.length ?? 0) : 0;
             const participantCount = Math.max((room.participants?.length ?? 1) - 1, 1);
             return { readByCount, participantCount };
@@ -230,7 +239,7 @@ let ChatService = class ChatService {
         const recipient = await this.usersRepository.findById(recipientId);
         if (!recipient || !recipient.blockedUsers)
             return false;
-        return recipient.blockedUsers.some(id => id.toString() === senderId);
+        return recipient.blockedUsers.some((id) => id.toString() === senderId);
     }
     async findGroupOrFail(roomId) {
         const room = await this.chatRoomsRepository.findById(roomId);

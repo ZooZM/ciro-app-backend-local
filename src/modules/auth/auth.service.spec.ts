@@ -95,7 +95,9 @@ describe('AuthService', () => {
 
       const result = await authService.register(registerDto);
 
-      expect(usersService.findByPhoneNumber).toHaveBeenCalledWith(registerDto.phoneNumber);
+      expect(usersService.findByPhoneNumber).toHaveBeenCalledWith(
+        registerDto.phoneNumber,
+      );
       expect(usersService.create).toHaveBeenCalled();
       expect(jwtService.signAsync).toHaveBeenCalledTimes(2);
       expect(result).toHaveProperty('accessToken');
@@ -111,7 +113,9 @@ describe('AuthService', () => {
     it('should throw ConflictException if the phone number already exists', async () => {
       usersService.findByPhoneNumber.mockResolvedValue(mockUser as any);
 
-      await expect(authService.register(registerDto)).rejects.toThrow(ConflictException);
+      await expect(authService.register(registerDto)).rejects.toThrow(
+        ConflictException,
+      );
       expect(usersService.create).not.toHaveBeenCalled();
     });
 
@@ -119,7 +123,9 @@ describe('AuthService', () => {
       usersService.findByPhoneNumber.mockResolvedValue(null);
       usersService.findByEmail.mockResolvedValue(mockUser as any);
 
-      await expect(authService.register(registerDto)).rejects.toThrow(ConflictException);
+      await expect(authService.register(registerDto)).rejects.toThrow(
+        ConflictException,
+      );
       expect(usersService.create).not.toHaveBeenCalled();
     });
   });
@@ -136,8 +142,13 @@ describe('AuthService', () => {
 
       const result = await authService.login(loginDto);
 
-      expect(usersService.findByPhoneNumber).toHaveBeenCalledWith(loginDto.phoneNumber);
-      expect(bcrypt.compare).toHaveBeenCalledWith(loginDto.password, mockUser.password);
+      expect(usersService.findByPhoneNumber).toHaveBeenCalledWith(
+        loginDto.phoneNumber,
+      );
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        loginDto.password,
+        mockUser.password,
+      );
       expect(result).toHaveProperty('accessToken');
       expect(result.user.name).toBe(mockUser.name);
     });
@@ -145,21 +156,27 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if the user is not found', async () => {
       usersService.findByPhoneNumber.mockResolvedValue(null);
 
-      await expect(authService.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException if the password does not match', async () => {
       usersService.findByPhoneNumber.mockResolvedValue(mockUser as any);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(authService.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException if user has no password', async () => {
       const userNoPass = { ...mockUser, password: null };
       usersService.findByPhoneNumber.mockResolvedValue(userNoPass as any);
 
-      await expect(authService.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -187,7 +204,10 @@ describe('AuthService', () => {
       redisClientMock.get.mockResolvedValue('123456');
       usersService.findByPhoneNumber.mockResolvedValue(mockUser as any);
 
-      const result = await authService.verifyOtp({ phoneNumber: '+1234567890', code: '123456' });
+      const result = await authService.verifyOtp({
+        phoneNumber: '+1234567890',
+        code: '123456',
+      });
 
       expect(redisClientMock.del).toHaveBeenCalled();
       expect(result).toHaveProperty('accessToken');

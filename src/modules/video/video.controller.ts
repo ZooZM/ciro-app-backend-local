@@ -11,9 +11,13 @@ export class VideoController {
   async joinRoom(@Param('roomId') roomId: string, @Request() req: any) {
     // Dynamically parsing out from validated payload safely and effortlessly
     const { userId, name } = req.user;
-    
-    const token = await this.videoService.generateRoomToken(userId, name, roomId);
-    
+
+    const token = await this.videoService.generateRoomToken(
+      userId,
+      name,
+      roomId,
+    );
+
     return { token };
   }
 }

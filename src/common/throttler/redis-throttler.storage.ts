@@ -3,7 +3,9 @@ import { ThrottlerStorage } from '@nestjs/throttler';
 import Redis from 'ioredis';
 
 @Injectable()
-export class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
+export class RedisThrottlerStorage
+  implements ThrottlerStorage, OnApplicationShutdown
+{
   private readonly redis: Redis;
 
   constructor(redisUrl: string) {
@@ -36,7 +38,9 @@ export class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShu
       await this.redis.pexpire(counterKey, ttl);
     }
     const ttlRemainingMs = await this.redis.pttl(counterKey);
-    const timeToExpire = Math.ceil((ttlRemainingMs > 0 ? ttlRemainingMs : ttl) / 1000);
+    const timeToExpire = Math.ceil(
+      (ttlRemainingMs > 0 ? ttlRemainingMs : ttl) / 1000,
+    );
 
     if (totalHits > limit) {
       await this.redis.set(blockKey, '1', 'PX', blockDuration);

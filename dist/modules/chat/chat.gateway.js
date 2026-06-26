@@ -32,6 +32,9 @@ const messages_repository_1 = require("./messages.repository");
 const chat_config_1 = require("./chat.config");
 const push_service_1 = require("../notifications/push.service");
 const chat_rooms_repository_1 = require("./chat-rooms.repository");
+const status_service_1 = require("../status/status.service");
+const create_status_dto_1 = require("../status/dto/create-status.dto");
+const location_batch_service_1 = require("../map/location-batch.service");
 let ChatGateway = ChatGateway_1 = class ChatGateway {
     jwtService;
     chatService;
@@ -41,6 +44,8 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
     pushService;
     chatRoomsRepository;
     redis;
+    statusService;
+    locationBatchService;
     server;
     activeSockets = new Map();
     activeCalls = new Map();
@@ -48,7 +53,7 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
     userRoomIds = new Map();
     userScreenShares = new Map();
     logger = new common_1.Logger(ChatGateway_1.name);
-    constructor(jwtService, chatService, usersService, configService, messagesRepository, pushService, chatRoomsRepository, redis) {
+    constructor(jwtService, chatService, usersService, configService, messagesRepository, pushService, chatRoomsRepository, redis, statusService, locationBatchService) {
         this.jwtService = jwtService;
         this.chatService = chatService;
         this.usersService = usersService;
@@ -57,6 +62,19 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
         this.pushService = pushService;
         this.chatRoomsRepository = chatRoomsRepository;
         this.redis = redis;
+        this.statusService = statusService;
+        this.locationBatchService = locationBatchService;
+    }
+    onModuleInit() {
+        this.locationBatchService.onFlush((roomId, updates) => {
+            this.server.to(roomId).emit('locationUpdate', { updates });
+        });
+    }
+    getUserRoomIds(userId) {
+        return this.userRoomIds.get(userId) ?? [];
+    }
+    cancelPendingLocationUpdates(userId) {
+        this.locationBatchService.cancel(userId);
     }
     async handleConnection(client) {
         try {
@@ -153,6 +171,32 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
         this.logger.log(`User ${client.user.userId} manually joined room ${roomId}`);
         return { event: 'joinedRoom', data: roomId };
     }
+    async handleUploadStatus(client, payload) {
+        if (!client.user)
+            return;
+        try {
+            const { status } = await this.statusService.createStatus(client.user.userId, payload);
+            client.emit('statusUploaded', {
+                clientStatusId: status.clientStatusId,
+                id: status.id,
+                createdAt: status.createdAt,
+            });
+        }
+        catch (e) {
+            this.logger.error(`Upload Status Error: ${e.message}`);
+            client.emit('error', { message: e.message });
+        }
+    }
+    async handleStatusViewed(client, statusId) {
+        if (!client.user || !statusId)
+            return;
+        try {
+            await this.statusService.recordView(statusId, client.user.userId);
+        }
+        catch (e) {
+            this.logger.error(`Status Viewed Error: ${e.message}`);
+        }
+    }
     async handleSendMessage(client, payload) {
         if (!client.user)
             return;
@@ -162,7 +206,7 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             const { message, isNew } = await this.chatService.saveMessage(user.userId, payload);
             client.emit('messageSent', {
                 clientMessageId: payload.clientMessageId,
-                createdAt: message.createdAt
+                createdAt: message.createdAt,
             });
             if (isNew) {
                 client.broadcast.to(payload.chatRoomId).emit('newMessage', message);
@@ -171,11 +215,13 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
                     for (const participantId of room.participants) {
                         const id = participantId.toString();
                         if (id !== client.user.userId && !this.activeSockets.has(id)) {
-                            this.pushService.notifyOfflineUser(id, {
+                            this.pushService
+                                .notifyOfflineUser(id, {
                                 content: message.content ?? '',
                                 senderName: client.user.phoneNumber,
                                 roomId: payload.chatRoomId,
-                            }).catch(() => { });
+                            })
+                                .catch(() => { });
                         }
                     }
                 }
@@ -199,12 +245,50 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             isTyping: payload.isTyping,
         });
     }
+    async handleShareLocation(client, payload) {
+        if (!client.user)
+            return;
+        const userId = client.user.userId;
+        const longitude = Number(payload?.longitude);
+        const latitude = Number(payload?.latitude);
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude))
+            return;
+        const lastUpdatedAt = await this.usersService.updateLocation(userId, longitude, latitude);
+        const isGhost = await this.usersService.isGhostMode(userId);
+        if (isGhost)
+            return;
+        const roomIds = this.userRoomIds.get(userId) ?? [];
+        for (const roomId of roomIds) {
+            this.locationBatchService.enqueue(roomId, userId, {
+                userId,
+                longitude,
+                latitude,
+                isOnline: true,
+                lastUpdatedAt: lastUpdatedAt.toISOString(),
+            });
+        }
+    }
+    async handleStopSharingLocation(client) {
+        if (!client.user)
+            return;
+        const userId = client.user.userId;
+        await this.usersService.setSharingLocation(userId, false);
+        this.locationBatchService.cancel(userId);
+        const roomIds = this.userRoomIds.get(userId) ?? [];
+        for (const roomId of roomIds) {
+            this.server.to(roomId).emit('locationHidden', { userId });
+        }
+    }
     async handleMarkDelivered(client, payload) {
         if (!client.user)
             return;
         try {
             console.log('🚀 Payload received from Flutter(markDelivered):', payload);
-            const idsToMark = payload.clientMessageIds ? payload.clientMessageIds : (payload.clientMessageId ? [payload.clientMessageId] : []);
+            const idsToMark = payload.clientMessageIds
+                ? payload.clientMessageIds
+                : payload.clientMessageId
+                    ? [payload.clientMessageId]
+                    : [];
             if (idsToMark.length === 0)
                 return;
             await this.chatService.markMessagesDelivered(client.user.userId, payload.chatRoomId, idsToMark);
@@ -222,7 +306,11 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
         if (!client.user)
             return;
         try {
-            const idsToMark = payload.clientMessageIds ? payload.clientMessageIds : (payload.clientMessageId ? [payload.clientMessageId] : []);
+            const idsToMark = payload.clientMessageIds
+                ? payload.clientMessageIds
+                : payload.clientMessageId
+                    ? [payload.clientMessageId]
+                    : [];
             if (idsToMark.length === 0)
                 return;
             const counts = await this.chatService.markMessagesRead(client.user.userId, payload.chatRoomId, idsToMark);
@@ -307,11 +395,21 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
         const callerToken = new livekit_server_sdk_1.AccessToken(apiKey, apiSecret, {
             identity: callerDbId,
         });
-        callerToken.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+        callerToken.addGrant({
+            roomJoin: true,
+            room: roomName,
+            canPublish: true,
+            canSubscribe: true,
+        });
         const receiverToken = new livekit_server_sdk_1.AccessToken(apiKey, apiSecret, {
             identity: receiverDbId,
         });
-        receiverToken.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+        receiverToken.addGrant({
+            roomJoin: true,
+            room: roomName,
+            canPublish: true,
+            canSubscribe: true,
+        });
         if (callerSocket) {
             callerSocket.emit('callAccepted', {
                 receiverId: receiverDbId,
@@ -359,7 +457,10 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
         if (!client.user)
             return;
         const { chatRoomId, isVideo } = payload;
-        const room = await this.chatRoomsRepository.findOne({ _id: chatRoomId, participants: client.user.userId });
+        const room = await this.chatRoomsRepository.findOne({
+            _id: chatRoomId,
+            participants: client.user.userId,
+        });
         if (!room) {
             client.emit('callError', { reason: 'not_a_participant' });
             return;
@@ -408,7 +509,12 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             identity: client.user.userId,
             name: client.user.phoneNumber,
         });
-        callerToken.addGrant({ roomJoin: true, room: chatRoomId, canPublish: true, canSubscribe: true });
+        callerToken.addGrant({
+            roomJoin: true,
+            room: chatRoomId,
+            canPublish: true,
+            canSubscribe: true,
+        });
         const livekitToken = await callerToken.toJwt();
         client.emit('callAccepted', {
             chatRoomId,
@@ -440,7 +546,12 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             identity: client.user.userId,
             name: client.user.phoneNumber,
         });
-        token.addGrant({ roomJoin: true, room: chatRoomId, canPublish: true, canSubscribe: true });
+        token.addGrant({
+            roomJoin: true,
+            room: chatRoomId,
+            canPublish: true,
+            canSubscribe: true,
+        });
         const livekitToken = await token.toJwt();
         client.emit('callAccepted', {
             chatRoomId,
@@ -514,7 +625,10 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             const lastId = callEntry.participants.values().next().value;
             const lastSocket = this.activeSockets.get(lastId);
             if (lastSocket) {
-                lastSocket.emit('callEnded', { chatRoomId, reason: 'last-participant' });
+                lastSocket.emit('callEnded', {
+                    chatRoomId,
+                    reason: 'last-participant',
+                });
             }
             this.activeGroupCalls.delete(chatRoomId);
             this.server.to(chatRoomId).emit('groupCallEnded', {
@@ -542,14 +656,24 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             const result = await this.redis.set(lockKey, userId, 'EX', 21600, 'NX');
             if (result === 'OK') {
                 this.userScreenShares.set(userId, chatRoomId);
-                client.broadcast.to(chatRoomId).emit('screenShareStateChanged', { chatRoomId, userId, userName, isSharing, withAudio });
+                client.broadcast.to(chatRoomId).emit('screenShareStateChanged', {
+                    chatRoomId,
+                    userId,
+                    userName,
+                    isSharing,
+                    withAudio,
+                });
                 client.emit('screenShareAccepted', { chatRoomId });
                 this.logger.log(`[ScreenShare] ${userId} started sharing in room ${chatRoomId}`);
             }
             else {
-                const activeSharerUserId = await this.redis.get(lockKey) ?? '';
-                const activeSharer = activeSharerUserId ? await this.usersService.findById(activeSharerUserId) : null;
-                const activeSharerName = activeSharer?.name ?? activeSharer?.phoneNumber ?? '';
+                const activeSharerUserId = (await this.redis.get(lockKey)) ?? '';
+                const activeSharer = activeSharerUserId
+                    ? await this.usersService.findById(activeSharerUserId)
+                    : null;
+                const activeSharerName = activeSharer?.name ??
+                    activeSharer?.phoneNumber ??
+                    '';
                 client.emit('screenShareRejected', {
                     chatRoomId,
                     activeSharerUserId,
@@ -564,7 +688,13 @@ let ChatGateway = ChatGateway_1 = class ChatGateway {
             if (currentSharer === userId) {
                 await this.redis.del(lockKey);
                 this.userScreenShares.delete(userId);
-                client.broadcast.to(chatRoomId).emit('screenShareStateChanged', { chatRoomId, userId, userName, isSharing, withAudio });
+                client.broadcast.to(chatRoomId).emit('screenShareStateChanged', {
+                    chatRoomId,
+                    userId,
+                    userName,
+                    isSharing,
+                    withAudio,
+                });
                 this.logger.log(`[ScreenShare] ${userId} stopped sharing in room ${chatRoomId}`);
             }
         }
@@ -617,6 +747,23 @@ __decorate([
 ], ChatGateway.prototype, "handleJoinRoom", null);
 __decorate([
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    (0, websockets_1.SubscribeMessage)('uploadStatus'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, create_status_dto_1.CreateStatusDto]),
+    __metadata("design:returntype", Promise)
+], ChatGateway.prototype, "handleUploadStatus", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('statusViewed'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)('statusId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], ChatGateway.prototype, "handleStatusViewed", null);
+__decorate([
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     (0, websockets_1.SubscribeMessage)('sendMessage'),
     __param(0, (0, websockets_1.ConnectedSocket)()),
     __param(1, (0, websockets_1.MessageBody)()),
@@ -632,6 +779,21 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], ChatGateway.prototype, "handleTyping", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('shareLocation'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], ChatGateway.prototype, "handleShareLocation", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('stopSharingLocation'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ChatGateway.prototype, "handleStopSharingLocation", null);
 __decorate([
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
     (0, websockets_1.SubscribeMessage)('markDelivered'),
@@ -745,12 +907,15 @@ exports.ChatGateway = ChatGateway = ChatGateway_1 = __decorate([
         cors: { origin: '*' },
     }),
     __param(7, (0, common_1.Inject)('REDIS_CLIENT')),
+    __param(8, (0, common_1.Inject)((0, common_1.forwardRef)(() => status_service_1.StatusService))),
+    __param(9, (0, common_1.Inject)((0, common_1.forwardRef)(() => location_batch_service_1.LocationBatchService))),
     __metadata("design:paramtypes", [jwt_1.JwtService,
         chat_service_1.ChatService,
         users_service_1.UsersService,
         config_1.ConfigService,
         messages_repository_1.MessagesRepository,
         push_service_1.PushService,
-        chat_rooms_repository_1.ChatRoomsRepository, Function])
+        chat_rooms_repository_1.ChatRoomsRepository, Function, status_service_1.StatusService,
+        location_batch_service_1.LocationBatchService])
 ], ChatGateway);
 //# sourceMappingURL=chat.gateway.js.map

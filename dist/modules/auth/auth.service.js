@@ -87,7 +87,7 @@ let AuthService = class AuthService {
             user = await this.usersService.create({
                 phoneNumber,
                 name: 'New User',
-                isPhoneVerified: true
+                isPhoneVerified: true,
             });
         }
         else if (!user.isPhoneVerified) {
@@ -154,12 +154,20 @@ let AuthService = class AuthService {
         return this.generateAuthResponse(user);
     }
     async generateAuthResponse(user) {
-        const payload = { sub: user._id.toString(), phoneNumber: user.phoneNumber, name: user.name };
+        const payload = {
+            sub: user._id.toString(),
+            phoneNumber: user.phoneNumber,
+            name: user.name,
+        };
         const accessTokenExpiresIn = this.configService.get('JWT_ACCESS_EXPIRES_IN') || '15m';
         const refreshTokenExpiresIn = this.configService.get('JWT_REFRESH_EXPIRES_IN') || '365d';
         const [accessToken, refreshToken] = await Promise.all([
-            this.jwtService.signAsync(payload, { expiresIn: accessTokenExpiresIn }),
-            this.jwtService.signAsync(payload, { expiresIn: refreshTokenExpiresIn }),
+            this.jwtService.signAsync(payload, {
+                expiresIn: accessTokenExpiresIn,
+            }),
+            this.jwtService.signAsync(payload, {
+                expiresIn: refreshTokenExpiresIn,
+            }),
         ]);
         await this.usersService.updateRefreshToken(user._id.toString(), refreshToken);
         const userObj = user.toObject();

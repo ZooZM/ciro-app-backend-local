@@ -24,7 +24,9 @@ describe('AuthController', () => {
     const mockAuthService = {
       register: jest.fn().mockResolvedValue(mockAuthResponse),
       login: jest.fn().mockResolvedValue(mockAuthResponse),
-      sendOtp: jest.fn().mockResolvedValue({ message: 'OTP sent successfully' }),
+      sendOtp: jest
+        .fn()
+        .mockResolvedValue({ message: 'OTP sent successfully' }),
       verifyOtp: jest.fn().mockResolvedValue(mockAuthResponse),
     };
 
@@ -79,7 +81,7 @@ describe('AuthController', () => {
   describe('sendOtp', () => {
     it('should call authService.sendOtp with correct DTO', async () => {
       const dto: SendOtpDto = { phoneNumber: '+1234567890' };
-      
+
       const result = await controller.sendOtp(dto);
 
       expect(authService.sendOtp).toHaveBeenCalledWith(dto);

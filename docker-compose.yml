@@ -25,7 +25,7 @@ services:
       # Bind existing server uploads directory so old and new files persist
       - /var/www/html/ciro-chat-backend/uploads:/app/uploads
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -35,6 +35,8 @@ services:
 
   chat-mongo: # Renamed to avoid conflict with the old local setup
     image: mongo:8
+    ports:
+      - '27017:27017'
     container_name: chat-mongo
     restart: unless-stopped
     # No host ports exposed; runs only on the Docker network (avoids conflict with host port 27017)

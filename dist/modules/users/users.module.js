@@ -13,6 +13,7 @@ const jwt_1 = require("@nestjs/jwt");
 const passport_1 = require("@nestjs/passport");
 const config_1 = require("@nestjs/config");
 const user_schema_1 = require("./schemas/user.schema");
+const status_schema_1 = require("../status/schemas/status.schema");
 const users_service_1 = require("./users.service");
 const users_repository_1 = require("./users.repository");
 const users_controller_1 = require("./users.controller");
@@ -22,7 +23,10 @@ exports.UsersModule = UsersModule;
 exports.UsersModule = UsersModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: user_schema_1.User.name, schema: user_schema_1.UserSchema }]),
+            mongoose_1.MongooseModule.forFeature([
+                { name: user_schema_1.User.name, schema: user_schema_1.UserSchema },
+                { name: status_schema_1.Status.name, schema: status_schema_1.StatusSchema },
+            ]),
             passport_1.PassportModule,
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],

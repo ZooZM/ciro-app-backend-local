@@ -27,23 +27,31 @@ var SubscriptionStatus;
 let Subscription = class Subscription {
     tier;
     status;
-    translationMinutesBalance;
+    translationSecondsBalance;
     expiresAt;
     paymentCustomerId;
 };
 exports.Subscription = Subscription;
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, enum: SubscriptionTier, default: SubscriptionTier.FREE }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: SubscriptionTier,
+        default: SubscriptionTier.FREE,
+    }),
     __metadata("design:type", String)
 ], Subscription.prototype, "tier", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, enum: SubscriptionStatus, default: SubscriptionStatus.ACTIVE }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: SubscriptionStatus,
+        default: SubscriptionStatus.ACTIVE,
+    }),
     __metadata("design:type", String)
 ], Subscription.prototype, "status", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: 0 }),
     __metadata("design:type", Number)
-], Subscription.prototype, "translationMinutesBalance", void 0);
+], Subscription.prototype, "translationSecondsBalance", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: Date, required: false }),
     __metadata("design:type", Date)
@@ -81,8 +89,13 @@ let User = class User {
     refreshToken;
     isOnline;
     location;
+    locationUpdatedAt;
+    isGhostMode;
+    isSharingLocation;
     subscription;
     blockedUsers;
+    syncedContacts;
+    defaultStatusAudience;
 };
 exports.User = User;
 __decorate([
@@ -122,6 +135,18 @@ __decorate([
     __metadata("design:type", Location)
 ], User.prototype, "location", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: Date, required: false }),
+    __metadata("design:type", Date)
+], User.prototype, "locationUpdatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "isGhostMode", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "isSharingLocation", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: Subscription, default: () => ({}) }),
     __metadata("design:type", Subscription)
 ], User.prototype, "subscription", void 0);
@@ -129,8 +154,17 @@ __decorate([
     (0, mongoose_1.Prop)({ type: [{ type: mongoose_2.Types.ObjectId, ref: 'User' }], default: [] }),
     __metadata("design:type", Array)
 ], User.prototype, "blockedUsers", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [String], default: [] }),
+    __metadata("design:type", Array)
+], User.prototype, "syncedContacts", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [{ type: mongoose_2.Types.ObjectId, ref: 'User' }], default: [] }),
+    __metadata("design:type", Array)
+], User.prototype, "defaultStatusAudience", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
+exports.UserSchema.index({ syncedContacts: 1 });
 //# sourceMappingURL=user.schema.js.map

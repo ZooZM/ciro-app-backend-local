@@ -6,19 +6,31 @@ import { ChatRoom, ChatRoomDocument } from './schemas/chat-room.schema';
 
 @Injectable()
 export class ChatRoomsRepository extends BaseRepository<ChatRoomDocument> {
-  constructor(@InjectModel(ChatRoom.name) private readonly chatRoomModel: Model<ChatRoomDocument>) {
+  constructor(
+    @InjectModel(ChatRoom.name)
+    private readonly chatRoomModel: Model<ChatRoomDocument>,
+  ) {
     super(chatRoomModel);
   }
 
-  async findPrivateRoom(userA: string, userB: string): Promise<ChatRoomDocument | null> {
+  async findPrivateRoom(
+    userA: string,
+    userB: string,
+  ): Promise<ChatRoomDocument | null> {
     const participants = [new Types.ObjectId(userA), new Types.ObjectId(userB)];
-    return this.chatRoomModel.findOne({
-      type: 'PRIVATE',
-      participants: { $all: participants, $size: 2 },
-    }).exec();
+    return this.chatRoomModel
+      .findOne({
+        type: 'PRIVATE',
+        participants: { $all: participants, $size: 2 },
+      })
+      .exec();
   }
 
-  async getUserRooms(userId: string, limit: number, cursor?: string): Promise<ChatRoomDocument[]> {
+  async getUserRooms(
+    userId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<ChatRoomDocument[]> {
     const query: any = { participants: new Types.ObjectId(userId) };
     if (cursor) {
       query._id = { $lt: new Types.ObjectId(cursor) };
@@ -34,10 +46,12 @@ export class ChatRoomsRepository extends BaseRepository<ChatRoomDocument> {
   }
 
   async updateLastMessage(roomId: string, messageId: string): Promise<void> {
-    await this.chatRoomModel.updateOne(
-      { _id: new Types.ObjectId(roomId) },
-      { lastMessage: new Types.ObjectId(messageId) }
-    ).exec();
+    await this.chatRoomModel
+      .updateOne(
+        { _id: new Types.ObjectId(roomId) },
+        { lastMessage: new Types.ObjectId(messageId) },
+      )
+      .exec();
   }
 
   async findById(roomId: string): Promise<ChatRoomDocument | null> {
@@ -59,44 +73,64 @@ export class ChatRoomsRepository extends BaseRepository<ChatRoomDocument> {
   /**
    * Adds participant ObjectIds to the room using $addToSet (idempotent).
    */
-  async addParticipants(roomId: string, userIds: Types.ObjectId[]): Promise<ChatRoomDocument | null> {
-    return this.chatRoomModel.findByIdAndUpdate(
-      roomId,
-      { $addToSet: { participants: { $each: userIds } } },
-      { new: true },
-    ).exec();
+  async addParticipants(
+    roomId: string,
+    userIds: Types.ObjectId[],
+  ): Promise<ChatRoomDocument | null> {
+    return this.chatRoomModel
+      .findByIdAndUpdate(
+        roomId,
+        { $addToSet: { participants: { $each: userIds } } },
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Removes a single participant ObjectId from the room.
    */
-  async removeParticipant(roomId: string, userId: Types.ObjectId): Promise<ChatRoomDocument | null> {
-    return this.chatRoomModel.findByIdAndUpdate(
-      roomId,
-      { $pull: { participants: userId } },
-      { new: true },
-    ).exec();
+  async removeParticipant(
+    roomId: string,
+    userId: Types.ObjectId,
+  ): Promise<ChatRoomDocument | null> {
+    return this.chatRoomModel
+      .findByIdAndUpdate(
+        roomId,
+        { $pull: { participants: userId } },
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Removes a phone number from the admins array of a group.
    */
-  async removeAdmin(roomId: string, phoneNumber: string): Promise<ChatRoomDocument | null> {
-    return this.chatRoomModel.findByIdAndUpdate(
-      roomId,
-      { $pull: { admins: phoneNumber } },
-      { new: true },
-    ).exec();
+  async removeAdmin(
+    roomId: string,
+    phoneNumber: string,
+  ): Promise<ChatRoomDocument | null> {
+    return this.chatRoomModel
+      .findByIdAndUpdate(
+        roomId,
+        { $pull: { admins: phoneNumber } },
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Promotes a phone number to admin.
    */
-  async addAdmin(roomId: string, phoneNumber: string): Promise<ChatRoomDocument | null> {
-    return this.chatRoomModel.findByIdAndUpdate(
-      roomId,
-      { $addToSet: { admins: phoneNumber } },
-      { new: true },
-    ).exec();
+  async addAdmin(
+    roomId: string,
+    phoneNumber: string,
+  ): Promise<ChatRoomDocument | null> {
+    return this.chatRoomModel
+      .findByIdAndUpdate(
+        roomId,
+        { $addToSet: { admins: phoneNumber } },
+        { new: true },
+      )
+      .exec();
   }
 }

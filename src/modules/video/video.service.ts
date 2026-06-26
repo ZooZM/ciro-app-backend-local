@@ -10,7 +10,11 @@ export class VideoService {
     private chatRoomsRepository: ChatRoomsRepository,
   ) {}
 
-  async generateRoomToken(userId: string, userName: string, roomId: string): Promise<string> {
+  async generateRoomToken(
+    userId: string,
+    userName: string,
+    roomId: string,
+  ): Promise<string> {
     // INV-9: verify the caller is a participant of this ChatRoom before issuing token.
     // Skip the check for legacy 1-to-1 rooms that follow the "call_A_B" naming pattern.
     const isLegacyCallRoom = roomId.startsWith('call_');

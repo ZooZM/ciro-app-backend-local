@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const platform_express_1 = require("@nestjs/platform-express");
 const auth_module_1 = require("../auth/auth.module");
 const users_module_1 = require("../users/users.module");
+const status_module_1 = require("../status/status.module");
 const chat_room_schema_1 = require("./schemas/chat-room.schema");
 const message_schema_1 = require("./schemas/message.schema");
 const chat_service_1 = require("./chat.service");
@@ -22,6 +23,7 @@ const chat_rooms_repository_1 = require("./chat-rooms.repository");
 const messages_repository_1 = require("./messages.repository");
 const notifications_module_1 = require("../notifications/notifications.module");
 const redis_module_1 = require("../redis/redis.module");
+const map_module_1 = require("../map/map.module");
 let ChatModule = class ChatModule {
 };
 exports.ChatModule = ChatModule;
@@ -38,9 +40,16 @@ exports.ChatModule = ChatModule = __decorate([
             jwt_1.JwtModule,
             notifications_module_1.NotificationsModule,
             redis_module_1.RedisModule,
+            (0, common_1.forwardRef)(() => status_module_1.StatusModule),
+            (0, common_1.forwardRef)(() => map_module_1.MapModule),
         ],
-        providers: [chat_service_1.ChatService, chat_gateway_1.ChatGateway, chat_rooms_repository_1.ChatRoomsRepository, messages_repository_1.MessagesRepository],
-        exports: [chat_service_1.ChatService, chat_rooms_repository_1.ChatRoomsRepository, messages_repository_1.MessagesRepository],
+        providers: [
+            chat_service_1.ChatService,
+            chat_gateway_1.ChatGateway,
+            chat_rooms_repository_1.ChatRoomsRepository,
+            messages_repository_1.MessagesRepository,
+        ],
+        exports: [chat_service_1.ChatService, chat_gateway_1.ChatGateway, chat_rooms_repository_1.ChatRoomsRepository, messages_repository_1.MessagesRepository],
         controllers: [chat_controller_1.ChatController],
     })
 ], ChatModule);

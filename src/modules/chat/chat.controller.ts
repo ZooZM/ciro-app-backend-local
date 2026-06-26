@@ -22,7 +22,11 @@ import { randomUUID } from 'crypto';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CreateGroupDto, AddParticipantsDto, RemoveParticipantDto } from './dto/group.dto';
+import {
+  CreateGroupDto,
+  AddParticipantsDto,
+  RemoveParticipantDto,
+} from './dto/group.dto';
 import { ResolvePrivateChatDto } from './dto/resolve-private-chat.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -31,7 +35,7 @@ export class ChatController {
   constructor(
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
-  ) { }
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Room & Message Queries
@@ -66,11 +70,23 @@ export class ChatController {
    */
   @Post('private/resolve')
   @HttpCode(HttpStatus.OK)
-  async resolvePrivateChat(@Request() req: any, @Body() dto: ResolvePrivateChatDto) {
-    const { roomId, room } = await this.chatService.resolvePrivateRoom(
-      req.user.userId,
-      dto.userId,
-    );
+  async resolvePrivateChat(
+    @Request() req: any,
+    @Body() dto: ResolvePrivateChatDto,
+  ) {
+    const { roomId, room, isNew, targetId } =
+      await this.chatService.resolvePrivateRoom(req.user.userId, dto.userId);
+
+    // Notify the other participant so their socket joins the room and their
+    // chat list updates immediately — without this, the first message sent
+    // into a brand-new room has no subscriber on the receiving end and only
+    // arrives once they separately refresh/reconnect.
+    if (isNew) {
+      await this.chatGateway.broadcastNewChatRoom([targetId], roomId, {
+        room,
+      });
+    }
+
     return { roomId, room };
   }
 
@@ -106,11 +122,15 @@ export class ChatController {
       limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB hard cap
       fileFilter: (_req, file, cb) => {
         // Allow: images, audio, video, pdf, office docs, plain text
-        const allowed = /^(image|audio|video)\/.+$|application\/(pdf|msword|vnd\.openxmlformats|octet-stream)|text\/.+/;
+        const allowed =
+          /^(image|audio|video)\/.+$|application\/(pdf|msword|vnd\.openxmlformats|octet-stream)|text\/.+/;
         if (allowed.test(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}`), false);
+          cb(
+            new BadRequestException(`Unsupported file type: ${file.mimetype}`),
+            false,
+          );
         }
       },
     }),
@@ -118,7 +138,7 @@ export class ChatController {
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
     return {
-      fileUrl:  `/uploads/${file.filename}`,
+      fileUrl: `/uploads/${file.filename}`,
       fileName: file.originalname,
       fileSize: file.size,
       mimeType: file.mimetype,
@@ -193,7 +213,11 @@ export class ChatController {
     @Body() dto: AddParticipantsDto,
   ) {
     const { phoneNumber } = req.user;
-    const updated = await this.chatService.addParticipants(phoneNumber, roomId, dto);
+    const updated = await this.chatService.addParticipants(
+      phoneNumber,
+      roomId,
+      dto,
+    );
     return {
       message: `${dto.phoneNumbersToAdd.length} participant(s) added.`,
       data: updated,
@@ -212,7 +236,11 @@ export class ChatController {
     @Body() dto: RemoveParticipantDto,
   ) {
     const { phoneNumber } = req.user;
-    const updated = await this.chatService.removeParticipant(phoneNumber, roomId, dto);
+    const updated = await this.chatService.removeParticipant(
+      phoneNumber,
+      roomId,
+      dto,
+    );
     return {
       message: `${dto.phoneNumberToRemove} has been removed from the group.`,
       data: updated,
@@ -244,7 +272,11 @@ export class ChatController {
     @Body() dto: { name?: string; avatarUrl?: string },
   ) {
     const { phoneNumber } = req.user;
-    const updated = await this.chatService.updateGroup(phoneNumber, roomId, dto);
+    const updated = await this.chatService.updateGroup(
+      phoneNumber,
+      roomId,
+      dto,
+    );
     this.chatGateway.broadcastRoomUpdated(roomId, {
       roomId,
       name: updated.name,
