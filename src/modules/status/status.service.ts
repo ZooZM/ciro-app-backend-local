@@ -118,6 +118,20 @@ export class StatusService {
     await this.fanOutStatusReceived(created);
 
     if (dto.privacy === StatusPrivacy.SHOW_ON_MAP) {
+      // Pin location = device's GPS at post time, not whatever stale
+      // `location` the user last shared — also flips isSharingLocation so
+      // the pin surfaces on the Following tab (authorized contacts), not
+      // just Explore. Without this, broadcastExploreStatusAdded silently
+      // no-ops for authors who never previously shared a location.
+      if (dto.longitude !== undefined && dto.latitude !== undefined) {
+        await this.usersRepository.updateOne({ _id: userId } as any, {
+          $set: {
+            location: { type: 'Point', coordinates: [dto.longitude, dto.latitude] },
+            locationUpdatedAt: new Date(),
+            isSharingLocation: true,
+          },
+        });
+      }
       await this.broadcastExploreStatusAdded(userId);
     }
 
@@ -152,6 +166,7 @@ export class StatusService {
       locationUpdatedAt: (author.locationUpdatedAt ?? new Date()).toISOString(),
       sharedGroupIds: [],
       isCoarse: true,
+      hasActiveStatus: true,
     });
   }
 
