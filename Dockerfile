@@ -33,11 +33,14 @@ COPY package*.json ./
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-RUN mkdir -p uploads && \
-    chown -R node:node /app uploads
+RUN mkdir -p uploads
 
-USER node
-
+# Running as root for now — the bind-mounted host `uploads` directory's
+# ownership doesn't match the `node` user's UID inside the container, which
+# blocks status/media uploads (writes to ./uploads/status) with permission
+# errors severe enough to surface as a 502 rather than a clean 4xx/5xx.
+# Revert to `USER node` once the host directory's ownership is fixed to
+# match (see Dockerfile git history for the non-root setup).
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
