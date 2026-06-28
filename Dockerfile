@@ -12,13 +12,6 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-bookworm-slim AS dependencies
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
 FROM node:20-bookworm-slim AS runner
 
 RUN apt-get update && \
@@ -28,10 +21,13 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
 
 # Copy pre-built node_modules from the dependencies stage (no reinstall)
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY package*.json ./
 
 RUN mkdir -p uploads && \
     chown -R node:node /app uploads
