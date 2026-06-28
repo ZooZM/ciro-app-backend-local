@@ -36,9 +36,7 @@ COPY --from=builder /app/dist ./dist
 RUN mkdir -p uploads && \
     chown -R node:node /app uploads
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN chown -R appuser:appgroup /app
-USER appuser
+USER node
 
 EXPOSE 3000
 
