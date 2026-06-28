@@ -22,6 +22,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           timeout: 15m # Increased to 15 minutes because Docker build takes longer
+          script_stop: true # Abort on the first failing command (e.g. a broken docker build) instead of carrying on and printing "success" anyway
           script: |
             cd /var/www/html/ciro-chat-backend
             
