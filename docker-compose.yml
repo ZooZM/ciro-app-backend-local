@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -35,8 +33,6 @@ services:
 
   chat-mongo: # Renamed to avoid conflict with the old local setup
     image: mongo:8
-    ports:
-      - '27017:27017'
     container_name: chat-mongo
     restart: unless-stopped
     # No host ports exposed; runs only on the Docker network (avoids conflict with host port 27017)
