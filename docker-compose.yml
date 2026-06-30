@@ -35,7 +35,9 @@ services:
     image: mongo:8
     container_name: chat-mongo
     restart: unless-stopped
-    # No host ports exposed; runs only on the Docker network (avoids conflict with host port 27017)
+    ports:
+      - '27018:27017' # 27017 is already taken on the host by another process;
+                      # Compass → connect to <server-ip>:27018, auth required
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
