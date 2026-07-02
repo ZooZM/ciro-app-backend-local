@@ -7,7 +7,11 @@ import {
   ChatRoomDocument,
   ChatRoomType,
 } from '../chat/schemas/chat-room.schema';
-import { Status, StatusDocument, StatusPrivacy } from '../status/schemas/status.schema';
+import {
+  Status,
+  StatusDocument,
+  StatusPrivacy,
+} from '../status/schemas/status.schema';
 
 @Injectable()
 export class MapRepository {
@@ -85,7 +89,10 @@ export class MapRepository {
   /** User ids with an active (non-expired) SHOW_ON_MAP status (Explore tab, FR-001a/b). */
   async getActiveShowOnMapAuthorIds(): Promise<string[]> {
     const statuses = await this.statusModel
-      .find({ privacy: StatusPrivacy.SHOW_ON_MAP, expiresAt: { $gt: new Date() } })
+      .find({
+        privacy: StatusPrivacy.SHOW_ON_MAP,
+        expiresAt: { $gt: new Date() },
+      })
       .select('authorId')
       .lean()
       .exec();

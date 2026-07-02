@@ -14,7 +14,10 @@ const ANDROID_STORE_URL =
   process.env.REELS_ANDROID_STORE_URL ||
   'https://play.google.com/store/apps/details?id=com.cirochat.app';
 
-function renderRedirectPage(reelId: string, userAgent: string): { url: string | null; html: string } {
+export function renderRedirectPage(
+  reelId: string,
+  userAgent: string,
+): { url: string | null; html: string } {
   const ua = userAgent.toLowerCase();
   const isIOS = /iphone|ipad|ipod/.test(ua);
   const isAndroid = /android/.test(ua);
@@ -41,10 +44,7 @@ function renderRedirectPage(reelId: string, userAgent: string): { url: string | 
 @Controller('reels')
 export class ReelsRedirectController {
   @Get(':id')
-  redirect(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  redirect(@Param('id') id: string, @Res() res: Response) {
     const userAgent = res.req.headers['user-agent']?.toString() ?? '';
     const { html } = renderRedirectPage(id, userAgent);
     res.type('html').send(html);

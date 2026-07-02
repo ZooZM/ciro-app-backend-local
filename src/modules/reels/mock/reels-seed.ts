@@ -75,24 +75,30 @@ export function buildReelsSeed(): ReelsSeedData {
   }));
 
   const videoCount = 40;
-  const videos: ReelVideoRecord[] = Array.from({ length: videoCount }, (_, i) => {
-    const creator = users[i % users.length];
-    return {
-      id: `reel-${i + 1}`,
-      creatorId: creator.id,
-      videoUrl: SAMPLE_VIDEO_URLS[i % SAMPLE_VIDEO_URLS.length],
-      thumbnailUrl: `https://picsum.photos/seed/reels-thumb-${i + 1}/400/700`,
-      // Newest first when sorted desc: reel-40 is most recent.
-      createdAt: daysAgoIso(videoCount - i),
-    };
-  });
+  const videos: ReelVideoRecord[] = Array.from(
+    { length: videoCount },
+    (_, i) => {
+      const creator = users[i % users.length];
+      return {
+        id: `reel-${i + 1}`,
+        creatorId: creator.id,
+        videoUrl: SAMPLE_VIDEO_URLS[i % SAMPLE_VIDEO_URLS.length],
+        thumbnailUrl: `https://picsum.photos/seed/reels-thumb-${i + 1}/400/700`,
+        // Newest first when sorted desc: reel-40 is most recent.
+        createdAt: daysAgoIso(videoCount - i),
+      };
+    },
+  );
 
   // A handful of seeded likes/comments/shares/follows so counts aren't all zero.
   const likes: { userId: string; videoId: string }[] = [];
   videos.forEach((video, i) => {
     const likerCount = (i % 5) + 1;
     for (let l = 0; l < likerCount; l++) {
-      likes.push({ userId: users[(i + l + 1) % users.length].id, videoId: video.id });
+      likes.push({
+        userId: users[(i + l + 1) % users.length].id,
+        videoId: video.id,
+      });
     }
   });
 

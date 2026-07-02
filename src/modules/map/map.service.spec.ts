@@ -41,9 +41,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
 
   describe('authorizedObserverIds', () => {
     it('includes shared-room participants and mutual contacts', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'contact-1',
-      ]);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['contact-1']);
       (usersService.findMutualContactIds as jest.Mock).mockResolvedValue([
         { toString: () => 'contact-2' },
       ]);
@@ -55,10 +55,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     });
 
     it('excludes users blocked by the viewer', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'blocked-user',
-        'ok-user',
-      ]);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['blocked-user', 'ok-user']);
       (usersService.getBlockedUserIds as jest.Mock).mockResolvedValue([
         'blocked-user',
       ]);
@@ -70,10 +69,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     });
 
     it('excludes users who blocked the viewer', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'blocker',
-        'ok-user',
-      ]);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['blocker', 'ok-user']);
       (mapRepository.getUsersWhoBlocked as jest.Mock).mockResolvedValue([
         'blocker',
       ]);
@@ -85,9 +83,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     });
 
     it('never includes the viewer themself', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'viewer',
-      ]);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['viewer']);
 
       const result = await mapService.authorizedObserverIds('viewer');
 
@@ -104,7 +102,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     });
 
     it('excludes ghost-mode users, users with no location, and users who stopped sharing', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue([
         'ghost-user',
         'no-location-user',
         'stopped-sharing-user',
@@ -149,9 +149,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
 
   describe('getNearbyUsers (SC-001/006) — scoped to the authorized set', () => {
     it('passes only the viewer-authorized ids through to the geospatial query', async () => {
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'contact-1',
-      ]);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['contact-1']);
 
       await mapService.getNearbyUsers('viewer', 31.2, 30.05, 10);
 
@@ -179,12 +179,12 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
 
   describe('getExploreUsers — coarse location for non-contacts (FR-001b)', () => {
     it('returns precise coordinates for an authorized contact', async () => {
-      (mapRepository.getActiveShowOnMapAuthorIds as jest.Mock).mockResolvedValue([
-        'author-1',
-      ]);
-      (mapRepository.getSharedRoomParticipantIds as jest.Mock).mockResolvedValue([
-        'author-1',
-      ]);
+      (
+        mapRepository.getActiveShowOnMapAuthorIds as jest.Mock
+      ).mockResolvedValue(['author-1']);
+      (
+        mapRepository.getSharedRoomParticipantIds as jest.Mock
+      ).mockResolvedValue(['author-1']);
       (usersService.findManyByIds as jest.Mock).mockResolvedValue([
         {
           _id: 'author-1',
@@ -202,9 +202,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     });
 
     it('truncates coordinates to ~2 decimal places for a non-contact', async () => {
-      (mapRepository.getActiveShowOnMapAuthorIds as jest.Mock).mockResolvedValue([
-        'stranger-1',
-      ]);
+      (
+        mapRepository.getActiveShowOnMapAuthorIds as jest.Mock
+      ).mockResolvedValue(['stranger-1']);
       // Not in the viewer's authorized set (no shared rooms / mutuals).
       (usersService.findManyByIds as jest.Mock).mockResolvedValue([
         {
@@ -243,7 +243,9 @@ describe('MapService (FR-010/014/015, FR-001b — SC-001/008)', () => {
     it('cancels any not-yet-flushed batch entry when enabling Ghost Mode', async () => {
       await mapService.setGhostMode('user-1', true);
 
-      expect(chatGateway.cancelPendingLocationUpdates).toHaveBeenCalledWith('user-1');
+      expect(chatGateway.cancelPendingLocationUpdates).toHaveBeenCalledWith(
+        'user-1',
+      );
     });
 
     it('re-broadcasts the last known location when disabling Ghost Mode', async () => {

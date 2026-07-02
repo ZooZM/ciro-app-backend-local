@@ -13,6 +13,8 @@ export enum MessageType {
   POLL = 'poll',
   EVENT = 'event',
   VIDEO = 'video',
+  /** 021-reels-video-feed: in-app reel share, rendered as a rich preview card (FR-021c). */
+  REEL_SHARE = 'reel_share',
 }
 
 export enum MessageStatus {
@@ -31,6 +33,7 @@ export enum MessageStatus {
  *   Audio:           { duration, mimeType, fileName }
  *   Poll:            { question, options, votes? }
  *   Event:           { title, dateTime, description? }
+ *   Reel share:      { reelId, thumbnailUrl, creatorName, deepLink } (021-reels-video-feed)
  */
 export class MessageMetadata {
   fileName?: string;
@@ -50,6 +53,9 @@ export class MessageMetadata {
   dateTime?: string;
   description?: string;
   thumbnailUrl?: string;
+  reelId?: string;
+  creatorName?: string;
+  deepLink?: string;
 }
 
 export type MessageDocument = Message & Document;

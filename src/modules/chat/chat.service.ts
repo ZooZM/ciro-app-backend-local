@@ -51,7 +51,12 @@ export class ChatService {
   async resolvePrivateRoom(
     requesterId: string,
     targetUserId: string,
-  ): Promise<{ roomId: string; room: ChatRoomDocument; isNew: boolean; targetId: string }> {
+  ): Promise<{
+    roomId: string;
+    room: ChatRoomDocument;
+    isNew: boolean;
+    targetId: string;
+  }> {
     // 1. Look up target user by phone number
     const targetUser = await this.usersRepository.findById(targetUserId);
     if (!targetUser) {

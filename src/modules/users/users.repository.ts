@@ -195,7 +195,9 @@ export class UsersRepository extends BaseRepository<UserDocument> {
           },
         },
       })
-      .select('_id name phoneNumber avatarUrl location isOnline locationUpdatedAt')
+      .select(
+        '_id name phoneNumber avatarUrl location isOnline locationUpdatedAt',
+      )
       .lean()
       .exec();
 

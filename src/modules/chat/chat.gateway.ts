@@ -405,7 +405,9 @@ export class ChatGateway
    * their next REST refresh or the 2h TTL sweep.
    */
   @SubscribeMessage('stopSharingLocation')
-  async handleStopSharingLocation(@ConnectedSocket() client: AuthenticatedSocket) {
+  async handleStopSharingLocation(
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
     if (!client.user) return;
     const userId = client.user.userId;
     await this.usersService.setSharingLocation(userId, false);

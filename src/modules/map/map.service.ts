@@ -66,7 +66,9 @@ export class MapService {
 
   /** Full authorized set (non-distance-limited) for the "All Locations" filter (FR-018). */
   async getVisibleUsers(viewerId: string): Promise<MapUserDto[]> {
-    const authorizedIds = Array.from(await this.authorizedObserverIds(viewerId));
+    const authorizedIds = Array.from(
+      await this.authorizedObserverIds(viewerId),
+    );
     if (!authorizedIds.length) return [];
 
     const [users, sharedGroupIdsByMember, statusAuthorIds] = await Promise.all([
@@ -100,9 +102,8 @@ export class MapService {
     maxDistanceKm: number,
   ): Promise<MapUserDto[]> {
     const authorizedIds = Array.from(await this.authorizedObserverIds(userId));
-    const sharedGroupIdsByMember = await this.mapRepository.getSharedGroupIdsByMember(
-      userId,
-    );
+    const sharedGroupIdsByMember =
+      await this.mapRepository.getSharedGroupIdsByMember(userId);
     const users = await this.usersService.getNearbyUsers(
       userId,
       lng,
@@ -111,7 +112,12 @@ export class MapService {
       authorizedIds,
     );
     return users.map((u: any) =>
-      this.toMapUserDto(u, sharedGroupIdsByMember, false, u.hasActiveStatus === true),
+      this.toMapUserDto(
+        u,
+        sharedGroupIdsByMember,
+        false,
+        u.hasActiveStatus === true,
+      ),
     );
   }
 
@@ -129,9 +135,8 @@ export class MapService {
     if (!candidateIds.length) return [];
 
     const users = await this.usersService.findManyByIds(candidateIds);
-    const sharedGroupIdsByMember = await this.mapRepository.getSharedGroupIdsByMember(
-      viewerId,
-    );
+    const sharedGroupIdsByMember =
+      await this.mapRepository.getSharedGroupIdsByMember(viewerId);
 
     return users
       .filter((u: any) => u.location?.coordinates)
@@ -139,7 +144,12 @@ export class MapService {
         const isAuthorized = authorizedIds.has(u._id.toString());
         // Every candidate here came from getActiveShowOnMapAuthorIds(), so
         // by construction all of them currently have an active status.
-        return this.toMapUserDto(u, sharedGroupIdsByMember, !isAuthorized, true);
+        return this.toMapUserDto(
+          u,
+          sharedGroupIdsByMember,
+          !isAuthorized,
+          true,
+        );
       });
   }
 

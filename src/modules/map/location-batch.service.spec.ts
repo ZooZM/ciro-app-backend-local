@@ -1,6 +1,12 @@
-import { LocationBatchService, LocationBatchItem } from './location-batch.service';
+import {
+  LocationBatchService,
+  LocationBatchItem,
+} from './location-batch.service';
 
-function item(userId: string, overrides: Partial<LocationBatchItem> = {}): LocationBatchItem {
+function item(
+  userId: string,
+  overrides: Partial<LocationBatchItem> = {},
+): LocationBatchItem {
   return {
     userId,
     longitude: 31.2,

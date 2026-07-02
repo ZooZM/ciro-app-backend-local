@@ -76,12 +76,19 @@ export interface ReelsRepository {
 
   getReel(id: string, viewerId: string): Promise<ReelDto | null>;
 
-  toggleLike(id: string, viewerId: string): Promise<{ liked: boolean; likesCount: number } | null>;
+  toggleLike(
+    id: string,
+    viewerId: string,
+  ): Promise<{ liked: boolean; likesCount: number } | null>;
 
   listComments(
     id: string,
     params: { cursor?: string; limit: number },
-  ): Promise<{ items: CommentDto[]; nextCursor: string | null; commentsCount: number } | null>;
+  ): Promise<{
+    items: CommentDto[];
+    nextCursor: string | null;
+    commentsCount: number;
+  } | null>;
 
   addComment(
     id: string,
@@ -89,9 +96,15 @@ export interface ReelsRepository {
     text: string,
   ): Promise<{ comment: CommentDto; commentsCount: number } | null>;
 
-  recordShare(id: string, viewerId: string): Promise<{ sharesCount: number } | null>;
+  recordShare(
+    id: string,
+    viewerId: string,
+  ): Promise<{ sharesCount: number } | null>;
 
-  getProfile(userId: string, viewerId: string): Promise<CreatorProfileDto | null>;
+  getProfile(
+    userId: string,
+    viewerId: string,
+  ): Promise<CreatorProfileDto | null>;
 
   toggleFollow(
     userId: string,

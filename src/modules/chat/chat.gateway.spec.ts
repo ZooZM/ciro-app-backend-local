@@ -246,7 +246,9 @@ describe('ChatGateway', () => {
           { provide: MessagesRepository, useValue: { softDelete: jest.fn() } },
           {
             provide: PushService,
-            useValue: { notifyOfflineUser: jest.fn().mockResolvedValue(undefined) },
+            useValue: {
+              notifyOfflineUser: jest.fn().mockResolvedValue(undefined),
+            },
           },
           {
             provide: ChatRoomsRepository,
@@ -288,7 +290,11 @@ describe('ChatGateway', () => {
       expect(locationBatchService.enqueue).toHaveBeenCalledWith(
         'room-1',
         'user-123',
-        expect.objectContaining({ userId: 'user-123', longitude: 31.22, latitude: 30.05 }),
+        expect.objectContaining({
+          userId: 'user-123',
+          longitude: 31.22,
+          latitude: 30.05,
+        }),
       );
     });
 
@@ -334,7 +340,9 @@ describe('ChatGateway', () => {
           { provide: MessagesRepository, useValue: { softDelete: jest.fn() } },
           {
             provide: PushService,
-            useValue: { notifyOfflineUser: jest.fn().mockResolvedValue(undefined) },
+            useValue: {
+              notifyOfflineUser: jest.fn().mockResolvedValue(undefined),
+            },
           },
           {
             provide: ChatRoomsRepository,

@@ -24,7 +24,11 @@ export class ReelsMockStore implements ReelsRepository {
   private readonly videos: ReelVideoRecord[];
   private readonly likes: { userId: string; videoId: string }[];
   private readonly comments: ReelCommentRecord[];
-  private readonly shares: { userId: string; videoId: string; createdAt: string }[];
+  private readonly shares: {
+    userId: string;
+    videoId: string;
+    createdAt: string;
+  }[];
   private readonly follows: { followerId: string; followeeId: string }[];
   /** Master feed order: newest first, stable across the process lifetime. */
   private readonly feedOrder: ReelVideoRecord[];
@@ -38,7 +42,8 @@ export class ReelsMockStore implements ReelsRepository {
     this.shares = seed.shares;
     this.follows = seed.follows;
     this.feedOrder = [...this.videos].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }
 
@@ -73,7 +78,9 @@ export class ReelsMockStore implements ReelsRepository {
   }
 
   private isFollowing(followerId: string, followeeId: string): boolean {
-    return this.follows.some((f) => f.followerId === followerId && f.followeeId === followeeId);
+    return this.follows.some(
+      (f) => f.followerId === followerId && f.followeeId === followeeId,
+    );
   }
 
   private hasLiked(userId: string, videoId: string): boolean {
@@ -91,7 +98,9 @@ export class ReelsMockStore implements ReelsRepository {
         id: creator?.id ?? video.creatorId,
         name: creator?.name ?? 'Unknown',
         avatarUrl: creator?.avatarUrl ?? '',
-        viewerFollowing: creator ? this.isFollowing(viewerId, creator.id) : false,
+        viewerFollowing: creator
+          ? this.isFollowing(viewerId, creator.id)
+          : false,
       },
       likesCount: this.likesCount(video.id),
       commentsCount: this.commentsCount(video.id),
@@ -124,6 +133,8 @@ export class ReelsMockStore implements ReelsRepository {
 
   // ── ReelsRepository ────────────────────────────────────────────────────
 
+  // Interface is async for future real-DB compatibility (FR-033); this mock is sync.
+  // eslint-disable-next-line @typescript-eslint/require-await
   async listFeed(params: {
     viewerId: string;
     cursor?: string;
@@ -134,7 +145,9 @@ export class ReelsMockStore implements ReelsRepository {
 
     if (params.creatorId) {
       // Creator-scoped feed is finite (FR-007 clarification).
-      const filtered = this.feedOrder.filter((v) => v.creatorId === params.creatorId);
+      const filtered = this.feedOrder.filter(
+        (v) => v.creatorId === params.creatorId,
+      );
       const page = filtered.slice(offset, offset + params.limit);
       const nextOffset = offset + params.limit;
       return {
@@ -157,18 +170,22 @@ export class ReelsMockStore implements ReelsRepository {
     return { items, nextCursor: String(offset + params.limit) };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
   async getReel(id: string, viewerId: string): Promise<ReelDto | null> {
     const video = this.findVideo(id);
     return video ? this.toReelDto(video, viewerId) : null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
   async toggleLike(
     id: string,
     viewerId: string,
   ): Promise<{ liked: boolean; likesCount: number } | null> {
     const video = this.findVideo(id);
     if (!video) return null;
-    const idx = this.likes.findIndex((l) => l.userId === viewerId && l.videoId === id);
+    const idx = this.likes.findIndex(
+      (l) => l.userId === viewerId && l.videoId === id,
+    );
     if (idx >= 0) {
       this.likes.splice(idx, 1);
     } else {
@@ -177,16 +194,24 @@ export class ReelsMockStore implements ReelsRepository {
     return { liked: idx < 0, likesCount: this.likesCount(id) };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
   async listComments(
     id: string,
     params: { cursor?: string; limit: number },
-  ): Promise<{ items: CommentDto[]; nextCursor: string | null; commentsCount: number } | null> {
+  ): Promise<{
+    items: CommentDto[];
+    nextCursor: string | null;
+    commentsCount: number;
+  } | null> {
     const video = this.findVideo(id);
     if (!video) return null;
     const offset = this.parseCursor(params.cursor);
     const ordered = this.comments
       .filter((c) => c.videoId === id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
     const page = ordered.slice(offset, offset + params.limit);
     const nextOffset = offset + params.limit;
     return {
@@ -196,6 +221,7 @@ export class ReelsMockStore implements ReelsRepository {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
   async addComment(
     id: string,
     viewerId: string,
@@ -211,29 +237,55 @@ export class ReelsMockStore implements ReelsRepository {
       createdAt: new Date().toISOString(),
     };
     this.comments.push(record);
-    return { comment: this.toCommentDto(record), commentsCount: this.commentsCount(id) };
+    return {
+      comment: this.toCommentDto(record),
+      commentsCount: this.commentsCount(id),
+    };
   }
 
-  async recordShare(id: string, viewerId: string): Promise<{ sharesCount: number } | null> {
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
+  async recordShare(
+    id: string,
+    viewerId: string,
+  ): Promise<{ sharesCount: number } | null> {
     const video = this.findVideo(id);
     if (!video) return null;
-    this.shares.push({ userId: viewerId, videoId: id, createdAt: new Date().toISOString() });
+    this.shares.push({
+      userId: viewerId,
+      videoId: id,
+      createdAt: new Date().toISOString(),
+    });
     return { sharesCount: this.sharesCount(id) };
   }
 
-  async getProfile(userId: string, viewerId: string): Promise<CreatorProfileDto | null> {
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
+  async getProfile(
+    userId: string,
+    viewerId: string,
+  ): Promise<CreatorProfileDto | null> {
     const user = this.findUser(userId);
     if (!user) return null;
     const creatorVideos = this.feedOrder.filter((v) => v.creatorId === userId);
-    const totalLikes = creatorVideos.reduce((sum, v) => sum + this.likesCount(v.id), 0);
+    const totalLikes = creatorVideos.reduce(
+      (sum, v) => sum + this.likesCount(v.id),
+      0,
+    );
     return {
-      user: { id: user.id, name: user.name, avatarUrl: user.avatarUrl, bio: user.bio },
+      user: {
+        id: user.id,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        bio: user.bio,
+      },
       stats: {
         followers: this.followersCount(userId),
         following: this.followingCount(userId),
         totalLikes,
       },
-      videos: creatorVideos.map((v) => ({ id: v.id, thumbnailUrl: v.thumbnailUrl })),
+      videos: creatorVideos.map((v) => ({
+        id: v.id,
+        thumbnailUrl: v.thumbnailUrl,
+      })),
       viewer: {
         following: this.isFollowing(viewerId, userId),
         isSelf: userId === viewerId,
@@ -241,6 +293,7 @@ export class ReelsMockStore implements ReelsRepository {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- see listFeed
   async toggleFollow(
     userId: string,
     viewerId: string,
