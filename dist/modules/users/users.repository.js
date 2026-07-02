@@ -99,6 +99,7 @@ let UsersRepository = class UsersRepository extends base_repository_1.BaseReposi
             return [];
         const mutuals = await this.userModel
             .find({
+            _id: { $ne: new mongoose_2.Types.ObjectId(userId) },
             phoneNumber: { $in: user.syncedContacts },
             syncedContacts: user.phoneNumber,
         })

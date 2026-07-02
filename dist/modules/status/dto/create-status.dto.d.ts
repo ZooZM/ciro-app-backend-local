@@ -8,5 +8,7 @@ export declare class CreateStatusDto {
     musicTrackId?: string;
     caption?: string;
     privacy: StatusPrivacy;
+    longitude?: number;
+    latitude?: number;
     audience?: string[];
 }

@@ -23,6 +23,8 @@ class CreateStatusDto {
     musicTrackId;
     caption;
     privacy;
+    longitude;
+    latitude;
     audience;
 }
 exports.CreateStatusDto = CreateStatusDto;
@@ -67,6 +69,22 @@ __decorate([
     (0, class_validator_1.IsEnum)(status_schema_1.StatusPrivacy),
     __metadata("design:type", String)
 ], CreateStatusDto.prototype, "privacy", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((dto) => dto.privacy === status_schema_1.StatusPrivacy.SHOW_ON_MAP),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(-180),
+    (0, class_validator_1.Max)(180),
+    __metadata("design:type", Number)
+], CreateStatusDto.prototype, "longitude", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((dto) => dto.privacy === status_schema_1.StatusPrivacy.SHOW_ON_MAP),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(-90),
+    (0, class_validator_1.Max)(90),
+    __metadata("design:type", Number)
+], CreateStatusDto.prototype, "latitude", void 0);
 __decorate([
     (0, class_validator_1.ValidateIf)((dto) => dto.privacy === status_schema_1.StatusPrivacy.PRIVATE),
     (0, class_transformer_1.Transform)(({ value }) => {

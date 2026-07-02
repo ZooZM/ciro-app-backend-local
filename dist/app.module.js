@@ -57,6 +57,7 @@ const video_module_1 = require("./modules/video/video.module");
 const map_module_1 = require("./modules/map/map.module");
 const payment_module_1 = require("./modules/payment/payment.module");
 const translation_module_1 = require("./modules/translation/translation.module");
+const reels_module_1 = require("./modules/reels/reels.module");
 const Joi = __importStar(require("joi"));
 let AppModule = class AppModule {
 };
@@ -126,6 +127,7 @@ exports.AppModule = AppModule = __decorate([
             map_module_1.MapModule,
             payment_module_1.PaymentModule,
             translation_module_1.TranslationModule,
+            reels_module_1.ReelsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

@@ -43,6 +43,7 @@ let ChatService = class ChatService {
             throw new common_1.BadRequestException('You cannot start a chat with yourself.');
         }
         let room = await this.chatRoomsRepository.findPrivateRoom(requesterId, targetId);
+        let isNew = false;
         if (!room) {
             const participants = [
                 new mongoose_1.Types.ObjectId(requesterId),
@@ -52,8 +53,9 @@ let ChatService = class ChatService {
                 type: chat_room_schema_1.ChatRoomType.PRIVATE,
                 participants,
             });
+            isNew = true;
         }
-        return { roomId: room._id.toString(), room };
+        return { roomId: room._id.toString(), room, isNew, targetId };
     }
     async saveMessage(senderId, payload, extra) {
         const room = await this.chatRoomsRepository.findById(payload.chatRoomId);

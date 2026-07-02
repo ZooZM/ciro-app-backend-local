@@ -15,6 +15,7 @@ import { VideoModule } from './modules/video/video.module';
 import { MapModule } from './modules/map/map.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { TranslationModule } from './modules/translation/translation.module';
+import { ReelsModule } from './modules/reels/reels.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -96,6 +97,7 @@ import * as Joi from 'joi';
     MapModule,
     PaymentModule,
     TranslationModule,
+    ReelsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

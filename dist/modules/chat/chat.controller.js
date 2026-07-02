@@ -39,7 +39,12 @@ let ChatController = class ChatController {
         return this.chatService.getRoomMessages(roomId, l, cursor);
     }
     async resolvePrivateChat(req, dto) {
-        const { roomId, room } = await this.chatService.resolvePrivateRoom(req.user.userId, dto.userId);
+        const { roomId, room, isNew, targetId } = await this.chatService.resolvePrivateRoom(req.user.userId, dto.userId);
+        if (isNew) {
+            await this.chatGateway.broadcastNewChatRoom([targetId], roomId, {
+                room,
+            });
+        }
         return { roomId, room };
     }
     async syncStatuses(dto) {

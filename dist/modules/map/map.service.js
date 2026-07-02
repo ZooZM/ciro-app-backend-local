@@ -60,21 +60,23 @@ let MapService = class MapService {
         const authorizedIds = Array.from(await this.authorizedObserverIds(viewerId));
         if (!authorizedIds.length)
             return [];
-        const [users, sharedGroupIdsByMember] = await Promise.all([
+        const [users, sharedGroupIdsByMember, statusAuthorIds] = await Promise.all([
             this.usersService.findManyByIds(authorizedIds),
             this.mapRepository.getSharedGroupIdsByMember(viewerId),
+            this.mapRepository.getActiveShowOnMapAuthorIds(),
         ]);
+        const statusAuthorSet = new Set(statusAuthorIds);
         return users
             .filter((u) => u.isGhostMode !== true &&
             u.isSharingLocation === true &&
             u.location?.coordinates)
-            .map((u) => this.toMapUserDto(u, sharedGroupIdsByMember));
+            .map((u) => this.toMapUserDto(u, sharedGroupIdsByMember, false, statusAuthorSet.has(u._id.toString())));
     }
     async getNearbyUsers(userId, lng, lat, maxDistanceKm) {
         const authorizedIds = Array.from(await this.authorizedObserverIds(userId));
         const sharedGroupIdsByMember = await this.mapRepository.getSharedGroupIdsByMember(userId);
         const users = await this.usersService.getNearbyUsers(userId, lng, lat, maxDistanceKm, authorizedIds);
-        return users.map((u) => this.toMapUserDto(u, sharedGroupIdsByMember));
+        return users.map((u) => this.toMapUserDto(u, sharedGroupIdsByMember, false, u.hasActiveStatus === true));
     }
     async getExploreUsers(viewerId) {
         const [authorIds, authorizedIds] = await Promise.all([
@@ -90,7 +92,7 @@ let MapService = class MapService {
             .filter((u) => u.location?.coordinates)
             .map((u) => {
             const isAuthorized = authorizedIds.has(u._id.toString());
-            return this.toMapUserDto(u, sharedGroupIdsByMember, !isAuthorized);
+            return this.toMapUserDto(u, sharedGroupIdsByMember, !isAuthorized, true);
         });
     }
     async getGroups(userId) {
@@ -142,7 +144,7 @@ let MapService = class MapService {
     async getGhostMode(userId) {
         return { isGhostMode: await this.usersService.isGhostMode(userId) };
     }
-    toMapUserDto(user, sharedGroupIdsByMember, forceCoarse = false) {
+    toMapUserDto(user, sharedGroupIdsByMember, forceCoarse = false, hasActiveStatus = false) {
         const id = user._id.toString();
         const [lng, lat] = user.location.coordinates;
         const isCoarse = forceCoarse === true;
@@ -161,6 +163,7 @@ let MapService = class MapService {
                 : new Date(user.locationUpdatedAt ?? 0).toISOString(),
             sharedGroupIds: sharedGroupIdsByMember.get(id) ?? [],
             ...(isCoarse ? { isCoarse: true } : {}),
+            ...(hasActiveStatus ? { hasActiveStatus: true } : {}),
         };
     }
 };

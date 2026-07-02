@@ -14,6 +14,7 @@ export interface MapUserDto {
     locationUpdatedAt: string;
     sharedGroupIds: string[];
     isCoarse?: boolean;
+    hasActiveStatus?: boolean;
 }
 export declare function coarsen(value: number): number;
 export declare class MapService {

@@ -92,6 +92,15 @@ let StatusService = class StatusService {
         await created.populate('authorId', 'name avatarUrl');
         await this.fanOutStatusReceived(created);
         if (dto.privacy === status_schema_1.StatusPrivacy.SHOW_ON_MAP) {
+            if (dto.longitude !== undefined && dto.latitude !== undefined) {
+                await this.usersRepository.updateOne({ _id: userId }, {
+                    $set: {
+                        location: { type: 'Point', coordinates: [dto.longitude, dto.latitude] },
+                        locationUpdatedAt: new Date(),
+                        isSharingLocation: true,
+                    },
+                });
+            }
             await this.broadcastExploreStatusAdded(userId);
         }
         return { status: this.toStatusJson(created, userId), isNew: true };
@@ -114,6 +123,7 @@ let StatusService = class StatusService {
             locationUpdatedAt: (author.locationUpdatedAt ?? new Date()).toISOString(),
             sharedGroupIds: [],
             isCoarse: true,
+            hasActiveStatus: true,
         });
     }
     async getFeed(userId) {

@@ -15,6 +15,8 @@ export declare class ChatService {
     resolvePrivateRoom(requesterId: string, targetUserId: string): Promise<{
         roomId: string;
         room: ChatRoomDocument;
+        isNew: boolean;
+        targetId: string;
     }>;
     saveMessage(senderId: string, payload: SendMessageDto, extra?: {
         statusRef?: {
