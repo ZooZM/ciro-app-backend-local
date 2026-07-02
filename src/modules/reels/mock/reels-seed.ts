@@ -8,27 +8,29 @@ import {
 /**
  * Seed data for the Reels mock store (specs/021-reels-video-feed).
  *
- * All video URLs point at Google's public GTV sample-video bucket and all
- * images at picsum.photos' seeded endpoint — both public sample URLs, per
- * the "no backend-hosted video assets in v1" clarification. Reused across
- * multiple video records to reach ~40 seeded reels from a small pool of
- * distinct source files.
+ * Video URLs point at test-videos.co.uk (BBC-affiliated test-video hosting)
+ * and MDN's official cc0-videos bucket; images at picsum.photos' seeded
+ * endpoint — all public sample URLs, per the "no backend-hosted video assets
+ * in v1" clarification. Reused across multiple video records to reach ~40
+ * seeded reels from a small pool of distinct source files.
+ *
+ * NOTE: Google's `commondatastorage.googleapis.com/gtv-videos-bucket` — the
+ * historically ubiquitous "Big Buck Bunny" sample-video source used in nearly
+ * every Flutter/media tutorial — now returns 403 Forbidden (verified via
+ * curl during implementation; access appears to have been revoked/restricted
+ * at the bucket level, unrelated to this project). Every URL below was
+ * individually curl-verified (HTTP 206 + `content-type: video/mp4` on a
+ * ranged request) before being added — don't reintroduce the old bucket.
  */
 
 const SAMPLE_VIDEO_URLS = [
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+  'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4',
+  'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_2MB.mp4',
+  'https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4',
+  'https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_2MB.mp4',
+  'https://test-videos.co.uk/vids/jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4',
+  'https://test-videos.co.uk/vids/jellyfish/mp4/h264/360/Jellyfish_360_10s_2MB.mp4',
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
 ];
 
 const CREATOR_NAMES = [
