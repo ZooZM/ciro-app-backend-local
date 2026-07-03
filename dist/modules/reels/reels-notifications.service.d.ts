@@ -27,6 +27,10 @@ export declare class ReelsNotificationsService {
             username: string;
         }[];
     }): Promise<void>;
+    notifyReelRejected(params: {
+        recipientId: string;
+        reelId: string;
+    }): Promise<void>;
     private recordEvent;
     private push;
 }

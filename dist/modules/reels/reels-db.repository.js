@@ -18,6 +18,9 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_schema_1 = require("../users/schemas/user.schema");
 const reel_schema_1 = require("./schemas/reel.schema");
+const notification_event_schema_1 = require("./schemas/notification-event.schema");
+const promises_1 = require("fs/promises");
+const path_1 = require("path");
 const reel_like_schema_1 = require("./schemas/reel-like.schema");
 const reel_save_schema_1 = require("./schemas/reel-save.schema");
 const reel_view_schema_1 = require("./schemas/reel-view.schema");
@@ -33,7 +36,8 @@ let ReelsDbRepository = class ReelsDbRepository {
     commentModel;
     followModel;
     userModel;
-    constructor(reelModel, likeModel, saveModel, viewModel, shareModel, commentModel, followModel, userModel) {
+    notificationEventModel;
+    constructor(reelModel, likeModel, saveModel, viewModel, shareModel, commentModel, followModel, userModel, notificationEventModel) {
         this.reelModel = reelModel;
         this.likeModel = likeModel;
         this.saveModel = saveModel;
@@ -42,6 +46,7 @@ let ReelsDbRepository = class ReelsDbRepository {
         this.commentModel = commentModel;
         this.followModel = followModel;
         this.userModel = userModel;
+        this.notificationEventModel = notificationEventModel;
     }
     toObjectId(id) {
         if (!mongoose_2.Types.ObjectId.isValid(id))
@@ -117,6 +122,7 @@ let ReelsDbRepository = class ReelsDbRepository {
                     avatarUrl: creator?.avatarUrl ?? '',
                     viewerFollowing: followedSet.has(r.creatorId.toString()),
                 },
+                status: r.status,
                 viewsCount: r.viewsCount,
                 likesCount: r.likesCount,
                 commentsCount: r.commentsCount,
@@ -152,6 +158,30 @@ let ReelsDbRepository = class ReelsDbRepository {
             },
         };
     }
+    visibilityFilter(viewerId) {
+        const viewerObjectId = this.toObjectId(viewerId);
+        if (!viewerObjectId)
+            return { status: reel_schema_1.ReelStatus.PUBLISHED };
+        return {
+            $or: [{ status: reel_schema_1.ReelStatus.PUBLISHED }, { creatorId: viewerObjectId }],
+        };
+    }
+    async createReel(params) {
+        const doc = await this.reelModel.create({
+            creatorId: new mongoose_2.Types.ObjectId(params.creatorId),
+            videoUrl: params.videoUrl,
+            thumbnailUrl: params.thumbnailUrl,
+            description: params.description,
+            hashtags: params.hashtags,
+            mentions: params.mentions.map((m) => ({
+                userId: new mongoose_2.Types.ObjectId(m.userId),
+                username: m.username,
+            })),
+            status: reel_schema_1.ReelStatus.PENDING_MODERATION,
+        });
+        const [hydrated] = await this.hydrate([doc], params.creatorId);
+        return hydrated;
+    }
     async listFeed(params) {
         const offset = this.parseCursor(params.cursor);
         const filter = {};
@@ -170,6 +200,7 @@ let ReelsDbRepository = class ReelsDbRepository {
         if (params.hashtag) {
             filter.hashtags = params.hashtag.toLowerCase();
         }
+        Object.assign(filter, this.visibilityFilter(params.viewerId));
         const isScoped = Boolean(params.creatorId || params.hashtag);
         const total = await this.reelModel.countDocuments(filter).exec();
         if (total === 0)
@@ -205,7 +236,11 @@ let ReelsDbRepository = class ReelsDbRepository {
         if (!objectId)
             return null;
         const doc = await this.reelModel
-            .findOne({ _id: objectId, ...this.excludeFilter(excludeCreatorIds) })
+            .findOne({
+            _id: objectId,
+            ...this.excludeFilter(excludeCreatorIds),
+            ...this.visibilityFilter(viewerId),
+        })
             .exec();
         if (!doc)
             return null;
@@ -217,7 +252,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const userId = this.toObjectId(viewerId);
         if (!videoId || !userId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         const existing = await this.likeModel
@@ -255,7 +292,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const videoId = this.toObjectId(id);
         if (!videoId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         const offset = this.parseCursor(params.cursor);
@@ -303,7 +342,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const authorId = this.toObjectId(viewerId);
         if (!videoId || !authorId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         const created = await this.commentModel.create({ videoId, authorId, text });
@@ -331,7 +372,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const userId = this.toObjectId(viewerId);
         if (!videoId || !userId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         await this.shareModel.create({ userId, videoId });
@@ -349,10 +392,14 @@ let ReelsDbRepository = class ReelsDbRepository {
         if (!user)
             return null;
         const viewerObjectId = this.toObjectId(viewerId);
+        const isSelf = userId === viewerId;
         const videos = await this.reelModel
-            .find({ creatorId: targetId })
+            .find({
+            creatorId: targetId,
+            ...(isSelf ? {} : { status: reel_schema_1.ReelStatus.PUBLISHED }),
+        })
             .sort({ createdAt: -1, _id: -1 })
-            .select('_id thumbnailUrl')
+            .select('_id thumbnailUrl status')
             .lean()
             .exec();
         const isFollowing = viewerObjectId
@@ -376,10 +423,11 @@ let ReelsDbRepository = class ReelsDbRepository {
             videos: videos.map((v) => ({
                 id: v._id.toString(),
                 thumbnailUrl: v.thumbnailUrl,
+                status: v.status,
             })),
             viewer: {
                 following: isFollowing,
-                isSelf: userId === viewerId,
+                isSelf,
             },
         };
     }
@@ -430,7 +478,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const userId = this.toObjectId(viewerId);
         if (!videoId || !userId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         try {
@@ -447,7 +497,9 @@ let ReelsDbRepository = class ReelsDbRepository {
         const userId = this.toObjectId(viewerId);
         if (!videoId || !userId)
             return null;
-        const reel = await this.reelModel.findById(videoId).exec();
+        const reel = await this.reelModel
+            .findOne({ _id: videoId, status: reel_schema_1.ReelStatus.PUBLISHED })
+            .exec();
         if (!reel)
             return null;
         const existing = await this.saveModel
@@ -489,6 +541,7 @@ let ReelsDbRepository = class ReelsDbRepository {
             .find({
             _id: { $in: videoIds },
             ...this.excludeFilter(params.excludeCreatorIds),
+            ...this.visibilityFilter(viewerId),
         })
             .exec();
         const reelById = new Map(reels.map((r) => [r._id.toString(), r]));
@@ -507,6 +560,7 @@ let ReelsDbRepository = class ReelsDbRepository {
         const filter = {
             hashtags: { $regex: escaped, $options: 'i' },
             ...this.excludeFilter(params.excludeCreatorIds),
+            ...this.visibilityFilter(params.viewerId),
         };
         const total = await this.reelModel.countDocuments(filter).exec();
         if (total === 0)
@@ -569,6 +623,45 @@ let ReelsDbRepository = class ReelsDbRepository {
             nextCursor: nextOffset < total ? String(nextOffset) : null,
         };
     }
+    async deleteReel(id, viewerId) {
+        const videoId = this.toObjectId(id);
+        if (!videoId)
+            return null;
+        const reel = await this.reelModel.findById(videoId).exec();
+        if (!reel)
+            return null;
+        if (reel.creatorId.toString() !== viewerId)
+            return 'forbidden';
+        if (reel.likesCount > 0) {
+            await this.userModel
+                .updateOne({ _id: reel.creatorId }, { $inc: { totalLikes: -reel.likesCount } })
+                .exec();
+        }
+        await Promise.all([
+            this.likeModel.deleteMany({ videoId }).exec(),
+            this.saveModel.deleteMany({ videoId }).exec(),
+            this.viewModel.deleteMany({ videoId }).exec(),
+            this.shareModel.deleteMany({ videoId }).exec(),
+            this.commentModel.deleteMany({ videoId }).exec(),
+        ]);
+        await this.notificationEventModel.deleteMany({ reelId: videoId }).exec();
+        const { videoUrl, thumbnailUrl } = reel;
+        await this.reelModel.deleteOne({ _id: videoId }).exec();
+        await Promise.all([
+            this.unlinkIfLocal(videoUrl),
+            this.unlinkIfLocal(thumbnailUrl),
+        ]);
+        return { deleted: true, videoUrl, thumbnailUrl };
+    }
+    async unlinkIfLocal(url) {
+        if (!url.startsWith('/uploads/'))
+            return;
+        try {
+            await (0, promises_1.unlink)((0, path_1.join)(process.cwd(), url));
+        }
+        catch {
+        }
+    }
 };
 exports.ReelsDbRepository = ReelsDbRepository;
 exports.ReelsDbRepository = ReelsDbRepository = __decorate([
@@ -581,7 +674,9 @@ exports.ReelsDbRepository = ReelsDbRepository = __decorate([
     __param(5, (0, mongoose_1.InjectModel)(reel_comment_schema_1.ReelComment.name)),
     __param(6, (0, mongoose_1.InjectModel)(follow_schema_1.Follow.name)),
     __param(7, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
+    __param(8, (0, mongoose_1.InjectModel)(notification_event_schema_1.NotificationEvent.name)),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,

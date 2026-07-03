@@ -1,4 +1,5 @@
 import { Model } from 'mongoose';
+import { Queue } from 'bullmq';
 import { UserDocument } from '../users/schemas/user.schema';
 import type { ReelsRepository } from './reels.repository';
 import { FeedQueryDto, CommentsQueryDto } from './dto/feed-query.dto';
@@ -8,7 +9,15 @@ export declare class ReelsService {
     private readonly repository;
     private readonly userModel;
     private readonly notifications;
-    constructor(repository: ReelsRepository, userModel: Model<UserDocument>, notifications: ReelsNotificationsService);
+    private readonly moderationQueue;
+    private readonly logger;
+    constructor(repository: ReelsRepository, userModel: Model<UserDocument>, notifications: ReelsNotificationsService, moderationQueue: Queue);
+    createReel(params: {
+        creatorId: string;
+        videoUrl: string;
+        thumbnailUrl: string;
+        description: string;
+    }): Promise<import("./reels.repository").ReelDto>;
     private getBlockSet;
     getFeed(viewerId: string, query: FeedQueryDto): Promise<{
         items: import("./reels.repository").ReelDto[];
@@ -60,5 +69,8 @@ export declare class ReelsService {
     }>;
     toggleBlock(targetId: string, viewerId: string): Promise<{
         blocked: boolean;
+    }>;
+    deleteReel(id: string, viewerId: string): Promise<{
+        deleted: true;
     }>;
 }

@@ -41,6 +41,7 @@ export interface ReelDto {
         avatarUrl: string;
         viewerFollowing: boolean;
     };
+    status: 'pending_moderation' | 'published' | 'rejected';
     viewsCount: number;
     likesCount: number;
     commentsCount: number;
@@ -72,6 +73,7 @@ export interface CreatorProfileDto {
     videos: {
         id: string;
         thumbnailUrl: string;
+        status: 'pending_moderation' | 'published' | 'rejected';
     }[];
     viewer: {
         following: boolean;
@@ -87,6 +89,17 @@ export interface UserSearchResultDto {
 }
 export declare const REELS_REPOSITORY: unique symbol;
 export interface ReelsRepository {
+    createReel(params: {
+        creatorId: string;
+        videoUrl: string;
+        thumbnailUrl: string;
+        description: string;
+        hashtags: string[];
+        mentions: {
+            userId: string;
+            username: string;
+        }[];
+    }): Promise<ReelDto>;
     listFeed(params: {
         viewerId: string;
         cursor?: string;
@@ -167,4 +180,9 @@ export interface ReelsRepository {
         items: UserSearchResultDto[];
         nextCursor: string | null;
     }>;
+    deleteReel(id: string, viewerId: string): Promise<{
+        deleted: true;
+        videoUrl: string;
+        thumbnailUrl: string;
+    } | 'forbidden' | null>;
 }

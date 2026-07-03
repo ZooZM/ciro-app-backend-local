@@ -8,7 +8,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReelsModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
+const bullmq_1 = require("@nestjs/bullmq");
+const axios_1 = require("@nestjs/axios");
 const reels_controller_1 = require("./reels.controller");
 const reels_users_controller_1 = require("./reels-users.controller");
 const reels_redirect_controller_1 = require("./reels-redirect.controller");
@@ -20,6 +23,11 @@ const reels_repository_1 = require("./reels.repository");
 const notifications_module_1 = require("../notifications/notifications.module");
 const user_schema_1 = require("../users/schemas/user.schema");
 const reel_schema_1 = require("./schemas/reel.schema");
+const reels_moderation_processor_1 = require("./reels-moderation.processor");
+const reels_moderation_service_1 = require("./reels-moderation.service");
+const moderation_provider_1 = require("./moderation/moderation-provider");
+const stub_provider_1 = require("./moderation/stub.provider");
+const sightengine_provider_1 = require("./moderation/sightengine.provider");
 const reel_like_schema_1 = require("./schemas/reel-like.schema");
 const reel_save_schema_1 = require("./schemas/reel-save.schema");
 const reel_view_schema_1 = require("./schemas/reel-view.schema");
@@ -45,6 +53,8 @@ exports.ReelsModule = ReelsModule = __decorate([
                 { name: notification_event_schema_1.NotificationEvent.name, schema: notification_event_schema_1.NotificationEventSchema },
             ]),
             notifications_module_1.NotificationsModule,
+            axios_1.HttpModule,
+            bullmq_1.BullModule.registerQueue({ name: reels_moderation_processor_1.REELS_MODERATION_QUEUE }),
         ],
         controllers: [reels_controller_1.ReelsController, reels_users_controller_1.ReelsUsersController, reels_redirect_controller_1.ReelsRedirectController],
         providers: [
@@ -52,7 +62,18 @@ exports.ReelsModule = ReelsModule = __decorate([
             reels_db_repository_1.ReelsDbRepository,
             reels_seed_service_1.ReelsSeedService,
             reels_notifications_service_1.ReelsNotificationsService,
+            reels_moderation_service_1.ReelsModerationService,
+            reels_moderation_processor_1.ReelsModerationProcessor,
             { provide: reels_repository_1.REELS_REPOSITORY, useExisting: reels_db_repository_1.ReelsDbRepository },
+            {
+                provide: moderation_provider_1.MODERATION_PROVIDER,
+                inject: [config_1.ConfigService, sightengine_provider_1.SightengineModerationProvider, stub_provider_1.StubModerationProvider],
+                useFactory: (config, sightengine, stub) => config.get('MODERATION_PROVIDER') === 'sightengine'
+                    ? sightengine
+                    : stub,
+            },
+            stub_provider_1.StubModerationProvider,
+            sightengine_provider_1.SightengineModerationProvider,
         ],
     })
 ], ReelsModule);

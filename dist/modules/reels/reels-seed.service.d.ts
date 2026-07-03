@@ -16,6 +16,7 @@ export declare class ReelsSeedService implements OnModuleInit {
     private readonly logger;
     constructor(userModel: Model<UserDocument>, reelModel: Model<ReelDocument>, likeModel: Model<ReelLikeDocument>, shareModel: Model<ReelShareDocument>, commentModel: Model<ReelCommentDocument>, followModel: Model<FollowDocument>);
     onModuleInit(): Promise<void>;
+    private backfillStatus;
     private backfillUsernames;
     private seed;
 }

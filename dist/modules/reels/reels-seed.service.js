@@ -86,12 +86,21 @@ let ReelsSeedService = ReelsSeedService_1 = class ReelsSeedService {
     }
     async onModuleInit() {
         await this.backfillUsernames();
+        await this.backfillStatus();
         const existingReels = await this.reelModel.countDocuments().exec();
         if (existingReels > 0) {
             this.logger.log('Reels already seeded — skipping demo content seed');
             return;
         }
         await this.seed();
+    }
+    async backfillStatus() {
+        const result = await this.reelModel
+            .updateMany({ status: { $exists: false } }, { $set: { status: reel_schema_1.ReelStatus.PUBLISHED, publishedAt: new Date() } })
+            .exec();
+        if (result.modifiedCount > 0) {
+            this.logger.log(`Backfilled status=published for ${result.modifiedCount} pre-v3 reel(s)`);
+        }
     }
     async backfillUsernames() {
         const usernameless = await this.userModel
@@ -141,6 +150,7 @@ let ReelsSeedService = ReelsSeedService_1 = class ReelsSeedService {
             const tag2 = HASHTAG_POOL[(i + 3) % HASHTAG_POOL.length];
             const description = `Reel #${i + 1} moments #${tag1} #${tag2} feat. @${mentionTarget.username}`;
             const { hashtags, mentions } = await (0, reels_text_util_1.parseHashtagsAndMentions)(description, this.userModel);
+            const seededAt = daysAgo(videoCount - i);
             const reel = await this.reelModel.create({
                 creatorId: creator._id,
                 videoUrl: SAMPLE_VIDEO_URLS[i % SAMPLE_VIDEO_URLS.length],
@@ -151,7 +161,9 @@ let ReelsSeedService = ReelsSeedService_1 = class ReelsSeedService {
                     userId: new mongoose_2.Types.ObjectId(m.userId),
                     username: m.username,
                 })),
-                createdAt: daysAgo(videoCount - i),
+                status: reel_schema_1.ReelStatus.PUBLISHED,
+                publishedAt: seededAt,
+                createdAt: seededAt,
             });
             reelDocs.push(reel);
         }

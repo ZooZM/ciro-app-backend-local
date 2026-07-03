@@ -16,7 +16,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { mkdirSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { unlink, open } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { parseFile } from 'music-metadata';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -185,19 +185,27 @@ export class ReelsController {
   }
 
   /**
-   * FR-060a: server-side duration enforcement (never trust the client
-   * alone). Pinned to `music-metadata@7.x` (last CommonJS-published major —
-   * v8+ is pure ESM, which needs a dynamic `import()` that Jest's default
-   * CJS test runtime can't execute without extra flags).
+   * FR-060a: server-side duration enforcement (never trust the client alone).
+   *
+   * Reads the MP4/MOV `moov`→`mvhd` atom directly (pure JS, no ffmpeg). This
+   * is robust for *any* valid video — critically including video-only clips
+   * (e.g. a muted screen recording), which `music-metadata` (an audio-focused
+   * library) reports as `duration: undefined`, wrongly rejecting a perfectly
+   * good upload. `music-metadata@7.x` remains a fallback for non-MP4 containers
+   * (e.g. WebM) and the `.wav` fixtures used by the e2e suite.
    */
   private async assertWithinDurationCap(videoPath: string): Promise<void> {
-    let durationSeconds: number | undefined;
-    try {
-      const meta = await parseFile(videoPath);
-      durationSeconds = meta.format.duration;
-    } catch {
-      throw new BadRequestException('Could not read the video duration');
+    let durationSeconds = await this.readMp4DurationSeconds(videoPath);
+
+    if (durationSeconds === undefined) {
+      try {
+        const meta = await parseFile(videoPath);
+        durationSeconds = meta.format.duration;
+      } catch {
+        // fall through to the undefined check below
+      }
     }
+
     if (durationSeconds === undefined || !Number.isFinite(durationSeconds)) {
       throw new BadRequestException('Could not read the video duration');
     }
@@ -205,6 +213,77 @@ export class ReelsController {
       throw new BadRequestException(
         `Video exceeds the ${MAX_DURATION_SECONDS - 1}-second limit`,
       );
+    }
+  }
+
+  /**
+   * Parse an ISO-BMFF (MP4/MOV) file's movie duration by walking top-level
+   * boxes to `moov`, then its child `mvhd`. Returns seconds, or `undefined`
+   * if the file isn't ISO-BMFF or has no readable `mvhd` (caller falls back).
+   * Only small header/atom slices are read — never the whole file.
+   */
+  private async readMp4DurationSeconds(
+    videoPath: string,
+  ): Promise<number | undefined> {
+    let fh: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      fh = await open(videoPath, 'r');
+      const { size: fileSize } = await fh.stat();
+
+      // Read one box header at `offset`; returns its size/type/payload offset.
+      const readBox = async (offset: number, end: number) => {
+        if (offset + 8 > end) return null;
+        const header = Buffer.alloc(8);
+        await fh!.read(header, 0, 8, offset);
+        let size = header.readUInt32BE(0);
+        const type = header.toString('latin1', 4, 8);
+        let headerSize = 8;
+        if (size === 1) {
+          const large = Buffer.alloc(8);
+          await fh!.read(large, 0, 8, offset + 8);
+          size = large.readUInt32BE(0) * 2 ** 32 + large.readUInt32BE(4);
+          headerSize = 16;
+        } else if (size === 0) {
+          size = end - offset; // extends to EOF
+        }
+        if (size < headerSize) return null;
+        return { size, type, payloadOffset: offset + headerSize };
+      };
+
+      const findMvhd = async (
+        start: number,
+        end: number,
+      ): Promise<number | undefined> => {
+        let offset = start;
+        while (offset < end) {
+          const box = await readBox(offset, end);
+          if (!box) break;
+          if (box.type === 'mvhd') {
+            const buf = Buffer.alloc(32);
+            await fh!.read(buf, 0, 32, box.payloadOffset);
+            const version = buf.readUInt8(0);
+            const timescale =
+              version === 1 ? buf.readUInt32BE(20) : buf.readUInt32BE(12);
+            const duration =
+              version === 1
+                ? buf.readUInt32BE(24) * 2 ** 32 + buf.readUInt32BE(28)
+                : buf.readUInt32BE(16);
+            return timescale > 0 ? duration / timescale : undefined;
+          }
+          if (box.type === 'moov') {
+            const found = await findMvhd(box.payloadOffset, offset + box.size);
+            if (found !== undefined) return found;
+          }
+          offset += box.size;
+        }
+        return undefined;
+      };
+
+      return await findMvhd(0, fileSize);
+    } catch {
+      return undefined;
+    } finally {
+      await fh?.close();
     }
   }
 

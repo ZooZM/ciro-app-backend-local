@@ -17,6 +17,7 @@ var NotificationEventType;
     NotificationEventType["NEW_FOLLOWER"] = "newFollower";
     NotificationEventType["REEL_LIKE"] = "reelLike";
     NotificationEventType["REEL_MENTION"] = "reelMention";
+    NotificationEventType["REEL_REJECTED"] = "reelRejected";
 })(NotificationEventType || (exports.NotificationEventType = NotificationEventType = {}));
 let NotificationEvent = class NotificationEvent {
     type;
@@ -31,8 +32,8 @@ __decorate([
     __metadata("design:type", String)
 ], NotificationEvent.prototype, "type", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', required: true }),
-    __metadata("design:type", mongoose_2.Types.ObjectId)
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', required: false, default: null }),
+    __metadata("design:type", Object)
 ], NotificationEvent.prototype, "actorId", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', required: true }),

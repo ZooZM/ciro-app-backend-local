@@ -11,22 +11,52 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ReelsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReelsService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
+const bullmq_1 = require("@nestjs/bullmq");
 const mongoose_2 = require("mongoose");
+const bullmq_2 = require("bullmq");
 const user_schema_1 = require("../users/schemas/user.schema");
 const reels_repository_1 = require("./reels.repository");
 const reels_notifications_service_1 = require("./reels-notifications.service");
-let ReelsService = class ReelsService {
+const reels_text_util_1 = require("./reels-text.util");
+const reels_moderation_processor_1 = require("./reels-moderation.processor");
+let ReelsService = ReelsService_1 = class ReelsService {
     repository;
     userModel;
     notifications;
-    constructor(repository, userModel, notifications) {
+    moderationQueue;
+    logger = new common_1.Logger(ReelsService_1.name);
+    constructor(repository, userModel, notifications, moderationQueue) {
         this.repository = repository;
         this.userModel = userModel;
         this.notifications = notifications;
+        this.moderationQueue = moderationQueue;
+    }
+    async createReel(params) {
+        const { hashtags, mentions } = await (0, reels_text_util_1.parseHashtagsAndMentions)(params.description, this.userModel);
+        const reel = await this.repository.createReel({
+            creatorId: params.creatorId,
+            videoUrl: params.videoUrl,
+            thumbnailUrl: params.thumbnailUrl,
+            description: params.description,
+            hashtags,
+            mentions,
+        });
+        try {
+            await this.moderationQueue.add('moderate', { reelId: reel.id }, {
+                jobId: reel.id,
+                attempts: 5,
+                backoff: { type: 'exponential', delay: 30_000 },
+            });
+        }
+        catch (err) {
+            this.logger.warn(`Failed to enqueue moderation job for reel ${reel.id}: ${err.message} — sweep will retry`);
+        }
+        return reel;
     }
     async getBlockSet(viewerId) {
         if (!mongoose_2.Types.ObjectId.isValid(viewerId))
@@ -199,13 +229,24 @@ let ReelsService = class ReelsService {
             .exec();
         return { blocked: true };
     }
+    async deleteReel(id, viewerId) {
+        const result = await this.repository.deleteReel(id, viewerId);
+        if (result === null)
+            throw new common_1.NotFoundException('Reel not found');
+        if (result === 'forbidden') {
+            throw new common_1.ForbiddenException('Only the owner can delete this reel');
+        }
+        return { deleted: true };
+    }
 };
 exports.ReelsService = ReelsService;
-exports.ReelsService = ReelsService = __decorate([
+exports.ReelsService = ReelsService = ReelsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(reels_repository_1.REELS_REPOSITORY)),
     __param(1, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
+    __param(3, (0, bullmq_1.InjectQueue)(reels_moderation_processor_1.REELS_MODERATION_QUEUE)),
     __metadata("design:paramtypes", [Object, mongoose_2.Model,
-        reels_notifications_service_1.ReelsNotificationsService])
+        reels_notifications_service_1.ReelsNotificationsService,
+        bullmq_2.Queue])
 ], ReelsService);
 //# sourceMappingURL=reels.service.js.map

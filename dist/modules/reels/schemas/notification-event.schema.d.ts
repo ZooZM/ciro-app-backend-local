@@ -3,11 +3,12 @@ export type NotificationEventDocument = NotificationEvent & Document;
 export declare enum NotificationEventType {
     NEW_FOLLOWER = "newFollower",
     REEL_LIKE = "reelLike",
-    REEL_MENTION = "reelMention"
+    REEL_MENTION = "reelMention",
+    REEL_REJECTED = "reelRejected"
 }
 export declare class NotificationEvent {
     type: NotificationEventType;
-    actorId: Types.ObjectId;
+    actorId?: Types.ObjectId | null;
     recipientId: Types.ObjectId;
     reelId?: Types.ObjectId;
     createdAt?: Date;
@@ -30,7 +31,7 @@ export declare const NotificationEventSchema: import("mongoose").Schema<Notifica
     }, "id"> & {
         id: string;
     }> | undefined;
-    actorId?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId, NotificationEvent, Document<unknown, {}, NotificationEvent, {
+    actorId?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId | null | undefined, NotificationEvent, Document<unknown, {}, NotificationEvent, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<NotificationEvent & {
         _id: Types.ObjectId;

@@ -1,6 +1,7 @@
 import { Model } from 'mongoose';
 import { UserDocument } from '../users/schemas/user.schema';
 import { ReelDocument } from './schemas/reel.schema';
+import { NotificationEventDocument } from './schemas/notification-event.schema';
 import { ReelLikeDocument } from './schemas/reel-like.schema';
 import { ReelSaveDocument } from './schemas/reel-save.schema';
 import { ReelViewDocument } from './schemas/reel-view.schema';
@@ -17,12 +18,25 @@ export declare class ReelsDbRepository implements ReelsRepository {
     private readonly commentModel;
     private readonly followModel;
     private readonly userModel;
-    constructor(reelModel: Model<ReelDocument>, likeModel: Model<ReelLikeDocument>, saveModel: Model<ReelSaveDocument>, viewModel: Model<ReelViewDocument>, shareModel: Model<ReelShareDocument>, commentModel: Model<ReelCommentDocument>, followModel: Model<FollowDocument>, userModel: Model<UserDocument>);
+    private readonly notificationEventModel;
+    constructor(reelModel: Model<ReelDocument>, likeModel: Model<ReelLikeDocument>, saveModel: Model<ReelSaveDocument>, viewModel: Model<ReelViewDocument>, shareModel: Model<ReelShareDocument>, commentModel: Model<ReelCommentDocument>, followModel: Model<FollowDocument>, userModel: Model<UserDocument>, notificationEventModel: Model<NotificationEventDocument>);
     private toObjectId;
     private parseCursor;
     private hydrate;
     private toRecord;
     private excludeFilter;
+    private visibilityFilter;
+    createReel(params: {
+        creatorId: string;
+        videoUrl: string;
+        thumbnailUrl: string;
+        description: string;
+        hashtags: string[];
+        mentions: {
+            userId: string;
+            username: string;
+        }[];
+    }): Promise<ReelDto>;
     listFeed(params: {
         viewerId: string;
         cursor?: string;
@@ -104,4 +118,10 @@ export declare class ReelsDbRepository implements ReelsRepository {
         items: UserSearchResultDto[];
         nextCursor: string | null;
     }>;
+    deleteReel(id: string, viewerId: string): Promise<{
+        deleted: true;
+        videoUrl: string;
+        thumbnailUrl: string;
+    } | 'forbidden' | null>;
+    private unlinkIfLocal;
 }

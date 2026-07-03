@@ -87,6 +87,11 @@ exports.AppModule = AppModule = __decorate([
                     TRANSLATION_LOW_BALANCE_SECONDS: Joi.number().default(30),
                     TRANSLATION_ACTIVATION_MIN_SECONDS: Joi.number().default(1),
                     TRANSLATION_WORKER_ROLE: Joi.string().default('translation-worker'),
+                    MODERATION_PROVIDER: Joi.string()
+                        .valid('stub', 'sightengine')
+                        .default('stub'),
+                    SIGHTENGINE_API_USER: Joi.string().optional().allow(''),
+                    SIGHTENGINE_API_SECRET: Joi.string().optional().allow(''),
                 }),
             }),
             throttler_1.ThrottlerModule.forRootAsync({
@@ -108,6 +113,7 @@ exports.AppModule = AppModule = __decorate([
                 useFactory: async (configService) => ({
                     connection: {
                         url: configService.get('REDIS_URL') || 'redis://localhost:6379',
+                        maxRetriesPerRequest: null,
                     },
                 }),
             }),

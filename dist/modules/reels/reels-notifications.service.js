@@ -111,11 +111,29 @@ let ReelsNotificationsService = ReelsNotificationsService_1 = class ReelsNotific
             });
         }
     }
+    async notifyReelRejected(params) {
+        const wasNew = await this.recordEvent({
+            type: notification_event_schema_1.NotificationEventType.REEL_REJECTED,
+            actorId: null,
+            recipientId: params.recipientId,
+            reelId: params.reelId,
+        });
+        if (!wasNew)
+            return;
+        await this.push(params.recipientId, {
+            title: 'CiroChat',
+            body: 'notif_rejected',
+            data: {
+                type: notification_event_schema_1.NotificationEventType.REEL_REJECTED,
+                reelId: params.reelId,
+            },
+        });
+    }
     async recordEvent(params) {
         try {
             await this.eventModel.create({
                 type: params.type,
-                actorId: new mongoose_2.Types.ObjectId(params.actorId),
+                actorId: params.actorId ? new mongoose_2.Types.ObjectId(params.actorId) : null,
                 recipientId: new mongoose_2.Types.ObjectId(params.recipientId),
                 reelId: params.reelId ? new mongoose_2.Types.ObjectId(params.reelId) : undefined,
             });
