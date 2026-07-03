@@ -25,6 +25,7 @@ var MessageType;
     MessageType["POLL"] = "poll";
     MessageType["EVENT"] = "event";
     MessageType["VIDEO"] = "video";
+    MessageType["REEL_SHARE"] = "reel_share";
 })(MessageType || (exports.MessageType = MessageType = {}));
 var MessageStatus;
 (function (MessageStatus) {
@@ -51,6 +52,9 @@ class MessageMetadata {
     dateTime;
     description;
     thumbnailUrl;
+    reelId;
+    creatorName;
+    deepLink;
 }
 exports.MessageMetadata = MessageMetadata;
 let StatusRef = class StatusRef {

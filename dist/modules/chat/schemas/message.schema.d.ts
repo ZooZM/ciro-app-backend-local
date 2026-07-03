@@ -10,7 +10,8 @@ export declare enum MessageType {
     AUDIO = "audio",
     POLL = "poll",
     EVENT = "event",
-    VIDEO = "video"
+    VIDEO = "video",
+    REEL_SHARE = "reel_share"
 }
 export declare enum MessageStatus {
     PENDING = "pending",
@@ -36,6 +37,9 @@ export declare class MessageMetadata {
     dateTime?: string;
     description?: string;
     thumbnailUrl?: string;
+    reelId?: string;
+    creatorName?: string;
+    deepLink?: string;
 }
 export type MessageDocument = Message & Document;
 export declare class StatusRef {

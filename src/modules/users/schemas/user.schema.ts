@@ -61,6 +61,37 @@ export class User {
   @Prop({ required: true, unique: true, index: true })
   phoneNumber: string;
 
+  // Pre-existing gap found while wiring 021-reels-video-feed (v2): every
+  // `.select()` projection in users.repository.ts already asked for
+  // `avatarUrl`, but no such field was ever declared on the schema, so it
+  // was silently dropped from every read (Mongoose ignores undeclared
+  // fields in strict mode). Declaring it here is what makes those existing
+  // projections — and FR-044/FR-046's avatar binding — actually work.
+  @Prop({ default: '' })
+  avatarUrl: string;
+
+  // 021-reels-video-feed (v2): Reels profile fields on the shared user
+  // identity (clarified — one identity for chat + Reels, not a separate
+  // profile entity). `unique: true` + `sparse: true` lets pre-existing users
+  // remain usernameless until backfilled by the reels seed/migration.
+  @Prop({ required: false, unique: true, sparse: true, lowercase: true })
+  username?: string;
+
+  @Prop({ default: '' })
+  bio: string;
+
+  // Stored counters (FR-055) — never computed by scanning relations at read
+  // time. Kept in sync with `$inc` alongside the relation write that causes
+  // the change (see ReelsDbRepository).
+  @Prop({ default: 0 })
+  followersCount: number;
+
+  @Prop({ default: 0 })
+  followingCount: number;
+
+  @Prop({ default: 0 })
+  totalLikes: number;
+
   @Prop({ required: false }) // fallback
   email?: string;
 
@@ -115,3 +146,8 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ syncedContacts: 1 });
+// 021-reels-video-feed (v2): reverse-block lookup (FR-052/053) — "who has
+// blocked me" is `{ blockedUsers: myId }`, serviced by this multikey index.
+UserSchema.index({ blockedUsers: 1 });
+// User search by name (FR-057/FR-058, endpoint 18).
+UserSchema.index({ name: 1 });

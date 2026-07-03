@@ -82,6 +82,12 @@ exports.Location = Location = __decorate([
 let User = class User {
     name;
     phoneNumber;
+    avatarUrl;
+    username;
+    bio;
+    followersCount;
+    followingCount;
+    totalLikes;
     email;
     password;
     isPhoneVerified;
@@ -106,6 +112,30 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, unique: true, index: true }),
     __metadata("design:type", String)
 ], User.prototype, "phoneNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: '' }),
+    __metadata("design:type", String)
+], User.prototype, "avatarUrl", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, unique: true, sparse: true, lowercase: true }),
+    __metadata("design:type", String)
+], User.prototype, "username", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: '' }),
+    __metadata("design:type", String)
+], User.prototype, "bio", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "followersCount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "followingCount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "totalLikes", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
@@ -167,4 +197,6 @@ exports.User = User = __decorate([
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
 exports.UserSchema.index({ syncedContacts: 1 });
+exports.UserSchema.index({ blockedUsers: 1 });
+exports.UserSchema.index({ name: 1 });
 //# sourceMappingURL=user.schema.js.map

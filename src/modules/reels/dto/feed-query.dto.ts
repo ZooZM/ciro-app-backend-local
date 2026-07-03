@@ -16,6 +16,11 @@ export class FeedQueryDto {
   @IsOptional()
   @IsString()
   creatorId?: string;
+
+  // FR-047a: hashtag-scoped feed (no '#', case-insensitive exact match).
+  @IsOptional()
+  @IsString()
+  hashtag?: string;
 }
 
 export class CommentsQueryDto {

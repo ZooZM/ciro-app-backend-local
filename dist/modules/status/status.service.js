@@ -95,7 +95,10 @@ let StatusService = class StatusService {
             if (dto.longitude !== undefined && dto.latitude !== undefined) {
                 await this.usersRepository.updateOne({ _id: userId }, {
                     $set: {
-                        location: { type: 'Point', coordinates: [dto.longitude, dto.latitude] },
+                        location: {
+                            type: 'Point',
+                            coordinates: [dto.longitude, dto.latitude],
+                        },
                         locationUpdatedAt: new Date(),
                         isSharingLocation: true,
                     },
@@ -205,7 +208,10 @@ let StatusService = class StatusService {
                 },
                 createdAt,
             });
-            await this.pushService.notifyStatusReaction(status.authorId.toString(), { reactorName, statusId });
+            await this.pushService.notifyStatusReaction(status.authorId.toString(), {
+                reactorName,
+                statusId,
+            });
         }
         return { statusId, reaction: dto.reaction };
     }

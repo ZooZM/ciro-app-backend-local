@@ -80,7 +80,10 @@ let MapRepository = class MapRepository {
     }
     async getActiveShowOnMapAuthorIds() {
         const statuses = await this.statusModel
-            .find({ privacy: status_schema_1.StatusPrivacy.SHOW_ON_MAP, expiresAt: { $gt: new Date() } })
+            .find({
+            privacy: status_schema_1.StatusPrivacy.SHOW_ON_MAP,
+            expiresAt: { $gt: new Date() },
+        })
             .select('authorId')
             .lean()
             .exec();

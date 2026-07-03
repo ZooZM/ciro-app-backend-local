@@ -18,6 +18,12 @@ export declare class UsersService {
         hasActiveStatus: boolean;
         name: string;
         phoneNumber: string;
+        avatarUrl: string;
+        username?: string;
+        bio: string;
+        followersCount: number;
+        followingCount: number;
+        totalLikes: number;
         email?: string;
         password?: string;
         isPhoneVerified: boolean;

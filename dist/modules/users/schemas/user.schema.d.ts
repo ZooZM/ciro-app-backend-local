@@ -24,6 +24,12 @@ export declare class Location {
 export declare class User {
     name: string;
     phoneNumber: string;
+    avatarUrl: string;
+    username?: string;
+    bio: string;
+    followersCount: number;
+    followingCount: number;
+    totalLikes: number;
     email?: string;
     password?: string;
     isPhoneVerified: boolean;
@@ -58,6 +64,60 @@ export declare const UserSchema: import("mongoose").Schema<User, import("mongoos
         id: string;
     }> | undefined;
     phoneNumber?: import("mongoose").SchemaDefinitionProperty<string, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    avatarUrl?: import("mongoose").SchemaDefinitionProperty<string, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    username?: import("mongoose").SchemaDefinitionProperty<string | undefined, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    bio?: import("mongoose").SchemaDefinitionProperty<string, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    followersCount?: import("mongoose").SchemaDefinitionProperty<number, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    followingCount?: import("mongoose").SchemaDefinitionProperty<number, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    totalLikes?: import("mongoose").SchemaDefinitionProperty<number, User, Document<unknown, {}, User, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<User & {
         _id: Types.ObjectId;

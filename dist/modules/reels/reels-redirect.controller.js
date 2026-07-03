@@ -13,6 +13,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReelsRedirectController = void 0;
+exports.renderRedirectPage = renderRedirectPage;
 const common_1 = require("@nestjs/common");
 const IOS_STORE_URL = process.env.REELS_IOS_STORE_URL || 'https://apps.apple.com/app/cirochat';
 const ANDROID_STORE_URL = process.env.REELS_ANDROID_STORE_URL ||

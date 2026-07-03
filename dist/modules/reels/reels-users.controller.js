@@ -16,10 +16,14 @@ exports.ReelsUsersController = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const reels_service_1 = require("./reels.service");
+const search_query_dto_1 = require("./dto/search-query.dto");
 let ReelsUsersController = class ReelsUsersController {
     reelsService;
     constructor(reelsService) {
         this.reelsService = reelsService;
+    }
+    searchUsers(req, query) {
+        return this.reelsService.searchUsers(req.user.userId, query);
     }
     getProfile(req, id) {
         return this.reelsService.getProfile(id, req.user.userId);
@@ -27,8 +31,19 @@ let ReelsUsersController = class ReelsUsersController {
     toggleFollow(req, id) {
         return this.reelsService.toggleFollow(id, req.user.userId);
     }
+    toggleBlock(req, id) {
+        return this.reelsService.toggleBlock(id, req.user.userId);
+    }
 };
 exports.ReelsUsersController = ReelsUsersController;
+__decorate([
+    (0, common_1.Get)('search'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, search_query_dto_1.SearchQueryDto]),
+    __metadata("design:returntype", void 0)
+], ReelsUsersController.prototype, "searchUsers", null);
 __decorate([
     (0, common_1.Get)(':id/profile'),
     __param(0, (0, common_1.Request)()),
@@ -45,6 +60,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], ReelsUsersController.prototype, "toggleFollow", null);
+__decorate([
+    (0, common_1.Post)(':id/block'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], ReelsUsersController.prototype, "toggleBlock", null);
 exports.ReelsUsersController = ReelsUsersController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('api/users'),

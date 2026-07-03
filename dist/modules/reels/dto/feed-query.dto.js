@@ -16,6 +16,7 @@ class FeedQueryDto {
     cursor;
     limit = 10;
     creatorId;
+    hashtag;
 }
 exports.FeedQueryDto = FeedQueryDto;
 __decorate([
@@ -36,6 +37,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], FeedQueryDto.prototype, "creatorId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], FeedQueryDto.prototype, "hashtag", void 0);
 class CommentsQueryDto {
     cursor;
     limit = 20;
