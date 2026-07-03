@@ -129,17 +129,44 @@ export class ReelsNotificationsService {
     }
   }
 
+  /**
+   * v3 (FR-064): the moderation worker rejected an uploaded reel. System-
+   * originated — no actor, so the self-skip guard in the other `notify*`
+   * methods does not apply here. Recorded even if push delivery fails
+   * (FR-054 semantics); a clean publish is deliberately silent (clarified).
+   */
+  async notifyReelRejected(params: {
+    recipientId: string;
+    reelId: string;
+  }): Promise<void> {
+    const wasNew = await this.recordEvent({
+      type: NotificationEventType.REEL_REJECTED,
+      actorId: null,
+      recipientId: params.recipientId,
+      reelId: params.reelId,
+    });
+    if (!wasNew) return;
+    await this.push(params.recipientId, {
+      title: 'CiroChat',
+      body: 'notif_rejected',
+      data: {
+        type: NotificationEventType.REEL_REJECTED,
+        reelId: params.reelId,
+      },
+    });
+  }
+
   /** Returns true if a new event row was written (i.e. this is not a repeat). */
   private async recordEvent(params: {
     type: NotificationEventType;
-    actorId: string;
+    actorId: string | null;
     recipientId: string;
     reelId?: string;
   }): Promise<boolean> {
     try {
       await this.eventModel.create({
         type: params.type,
-        actorId: new Types.ObjectId(params.actorId),
+        actorId: params.actorId ? new Types.ObjectId(params.actorId) : null,
         recipientId: new Types.ObjectId(params.recipientId),
         reelId: params.reelId ? new Types.ObjectId(params.reelId) : undefined,
       });

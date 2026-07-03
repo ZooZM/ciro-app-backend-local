@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BullModule } from '@nestjs/bullmq';
+import { HttpModule } from '@nestjs/axios';
 import { ReelsController } from './reels.controller';
 import { ReelsUsersController } from './reels-users.controller';
 import { ReelsRedirectController } from './reels-redirect.controller';
@@ -11,6 +14,11 @@ import { REELS_REPOSITORY } from './reels.repository';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Reel, ReelSchema } from './schemas/reel.schema';
+import { REELS_MODERATION_QUEUE, ReelsModerationProcessor } from './reels-moderation.processor';
+import { ReelsModerationService } from './reels-moderation.service';
+import { MODERATION_PROVIDER } from './moderation/moderation-provider';
+import { StubModerationProvider } from './moderation/stub.provider';
+import { SightengineModerationProvider } from './moderation/sightengine.provider';
 import { ReelLike, ReelLikeSchema } from './schemas/reel-like.schema';
 import { ReelSave, ReelSaveSchema } from './schemas/reel-save.schema';
 import { ReelView, ReelViewSchema } from './schemas/reel-view.schema';
@@ -40,6 +48,11 @@ import {
       { name: NotificationEvent.name, schema: NotificationEventSchema },
     ]),
     NotificationsModule,
+    // v3: HTTP client for the Sightengine provider (video + text REST calls).
+    HttpModule,
+    // v3 (R17): the moderation worker's queue. Connection is inherited from
+    // the global `BullModule.forRootAsync` registration in app.module.ts.
+    BullModule.registerQueue({ name: REELS_MODERATION_QUEUE }),
   ],
   controllers: [ReelsController, ReelsUsersController, ReelsRedirectController],
   providers: [
@@ -47,7 +60,25 @@ import {
     ReelsDbRepository,
     ReelsSeedService,
     ReelsNotificationsService,
+    ReelsModerationService,
+    ReelsModerationProcessor,
     { provide: REELS_REPOSITORY, useExisting: ReelsDbRepository },
+    // v3 (R15): 'stub' by default (dev/test, no credentials); 'sightengine'
+    // for the real provider. Swapping providers later is a new class here.
+    {
+      provide: MODERATION_PROVIDER,
+      inject: [ConfigService, SightengineModerationProvider, StubModerationProvider],
+      useFactory: (
+        config: ConfigService,
+        sightengine: SightengineModerationProvider,
+        stub: StubModerationProvider,
+      ) =>
+        config.get<string>('MODERATION_PROVIDER') === 'sightengine'
+          ? sightengine
+          : stub,
+    },
+    StubModerationProvider,
+    SightengineModerationProvider,
   ],
 })
 export class ReelsModule {}

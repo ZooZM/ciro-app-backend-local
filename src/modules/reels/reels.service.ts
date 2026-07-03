@@ -1,25 +1,78 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Model, Types } from 'mongoose';
+import { Queue } from 'bullmq';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { REELS_REPOSITORY } from './reels.repository';
 import type { ReelsRepository } from './reels.repository';
 import { FeedQueryDto, CommentsQueryDto } from './dto/feed-query.dto';
 import { SearchQueryDto } from './dto/search-query.dto';
 import { ReelsNotificationsService } from './reels-notifications.service';
+import { parseHashtagsAndMentions } from './reels-text.util';
+import { REELS_MODERATION_QUEUE } from './reels-moderation.processor';
 
 @Injectable()
 export class ReelsService {
+  private readonly logger = new Logger(ReelsService.name);
+
   constructor(
     @Inject(REELS_REPOSITORY) private readonly repository: ReelsRepository,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly notifications: ReelsNotificationsService,
+    @InjectQueue(REELS_MODERATION_QUEUE)
+    private readonly moderationQueue: Queue,
   ) {}
+
+  /**
+   * v3 (FR-060/FR-062): creates the reel as `pending_moderation` and
+   * enqueues the background moderation job. R17/plan rule 8: enqueue
+   * failure (e.g. Redis briefly down) MUST NOT fail the upload — the reel
+   * stays pending and the worker's boot/interval sweep picks it up later
+   * (fail-closed, never fail-open).
+   */
+  async createReel(params: {
+    creatorId: string;
+    videoUrl: string;
+    thumbnailUrl: string;
+    description: string;
+  }) {
+    const { hashtags, mentions } = await parseHashtagsAndMentions(
+      params.description,
+      this.userModel,
+    );
+    const reel = await this.repository.createReel({
+      creatorId: params.creatorId,
+      videoUrl: params.videoUrl,
+      thumbnailUrl: params.thumbnailUrl,
+      description: params.description,
+      hashtags,
+      mentions,
+    });
+    try {
+      await this.moderationQueue.add(
+        'moderate',
+        { reelId: reel.id },
+        {
+          jobId: reel.id,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 30_000 },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to enqueue moderation job for reel ${reel.id}: ${(err as Error).message} — sweep will retry`,
+      );
+    }
+    return reel;
+  }
 
   /**
    * FR-052/053: the caller's mutual block set — their own `blockedUsers`
@@ -221,5 +274,15 @@ export class ReelsService {
       )
       .exec();
     return { blocked: true };
+  }
+
+  /** v3 (FR-067): owner-only cascade delete, any status. */
+  async deleteReel(id: string, viewerId: string) {
+    const result = await this.repository.deleteReel(id, viewerId);
+    if (result === null) throw new NotFoundException('Reel not found');
+    if (result === 'forbidden') {
+      throw new ForbiddenException('Only the owner can delete this reel');
+    }
+    return { deleted: true as const };
   }
 }

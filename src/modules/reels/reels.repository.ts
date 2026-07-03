@@ -54,6 +54,9 @@ export interface ReelDto {
     avatarUrl: string;
     viewerFollowing: boolean;
   };
+  // v3 (FR-061): always present. Non-owners only ever receive `published`
+  // (every other status 404s or is filtered out before reaching a DTO).
+  status: 'pending_moderation' | 'published' | 'rejected';
   viewsCount: number;
   likesCount: number;
   commentsCount: number;
@@ -80,7 +83,14 @@ export interface CreatorProfileDto {
     bio: string;
   };
   stats: { followers: number; following: number; totalLikes: number };
-  videos: { id: string; thumbnailUrl: string }[];
+  // v3: `status` always present. Non-self grids only ever contain
+  // `published` items (FR-061) — the field is harmless there, but the
+  // self grid uses it to render Processing/Removed badges (FR-065).
+  videos: {
+    id: string;
+    thumbnailUrl: string;
+    status: 'pending_moderation' | 'published' | 'rejected';
+  }[];
   viewer: { following: boolean; isSelf: boolean };
 }
 
@@ -95,6 +105,22 @@ export interface UserSearchResultDto {
 export const REELS_REPOSITORY = Symbol('REELS_REPOSITORY');
 
 export interface ReelsRepository {
+  /**
+   * v3 (FR-060): creates a reel in `pending_moderation`. Hashtags/mentions
+   * are parsed by the caller (reused `reels-text.util.ts`, same as the
+   * seeder) and passed in already-resolved; no notifications are sent from
+   * here — mention notifications fire only at the publish transition
+   * (FR-063), owned by the moderation worker.
+   */
+  createReel(params: {
+    creatorId: string;
+    videoUrl: string;
+    thumbnailUrl: string;
+    description: string;
+    hashtags: string[];
+    mentions: { userId: string; username: string }[];
+  }): Promise<ReelDto>;
+
   /**
    * FR-007/FR-009: main feed loops the catalog (nextCursor never null);
    * creator-scoped and hashtag-scoped feeds are finite.
@@ -194,4 +220,17 @@ export interface ReelsRepository {
     limit: number;
     excludeUserIds: string[];
   }): Promise<{ items: UserSearchResultDto[]; nextCursor: string | null }>;
+
+  /**
+   * v3 (FR-067): owner-only cascade delete — relation docs, reel-scoped
+   * notification events, the creator's `totalLikes` counter, and the reel
+   * doc itself. Returns the media URLs so the caller can unlink the files;
+   * `'forbidden'` when `viewerId` is not the creator; `null` when unknown.
+   */
+  deleteReel(
+    id: string,
+    viewerId: string,
+  ): Promise<
+    { deleted: true; videoUrl: string; thumbnailUrl: string } | 'forbidden' | null
+  >;
 }

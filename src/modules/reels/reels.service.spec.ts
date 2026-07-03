@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { ReelsService } from './reels.service';
 import { ReelsRepository } from './reels.repository';
@@ -32,6 +36,7 @@ describe('ReelsService', () => {
 
   beforeEach(() => {
     repository = {
+      createReel: jest.fn(),
       listFeed: jest.fn(),
       getReel: jest.fn(),
       toggleLike: jest.fn(),
@@ -46,6 +51,7 @@ describe('ReelsService', () => {
       listSaved: jest.fn(),
       searchReels: jest.fn(),
       searchUsers: jest.fn(),
+      deleteReel: jest.fn(),
     };
 
     userModel = {
@@ -69,9 +75,17 @@ describe('ReelsService', () => {
       notifyNewFollower: jest.fn(),
       notifyReelLike: jest.fn(),
       notifyMentions: jest.fn(),
+      notifyReelRejected: jest.fn(),
     } as unknown as jest.Mocked<ReelsNotificationsService>;
 
-    service = new ReelsService(repository, userModel as never, notifications);
+    const moderationQueue = { add: jest.fn() };
+
+    service = new ReelsService(
+      repository,
+      userModel as never,
+      notifications,
+      moderationQueue as never,
+    );
   });
 
   describe('getFeed', () => {
@@ -243,6 +257,32 @@ describe('ReelsService', () => {
       await expect(
         service.toggleBlock(otherId, viewerId),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('deleteReel (FR-067, v3)', () => {
+    it('returns { deleted: true } on success', async () => {
+      repository.deleteReel.mockResolvedValue({
+        deleted: true,
+        videoUrl: '/uploads/reels/videos/a.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/a.jpg',
+      });
+      const result = await service.deleteReel(reelId, viewerId);
+      expect(result).toEqual({ deleted: true });
+    });
+
+    it('throws NotFoundException for an unknown reel', async () => {
+      repository.deleteReel.mockResolvedValue(null);
+      await expect(
+        service.deleteReel(reelId, viewerId),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws ForbiddenException when the caller is not the owner', async () => {
+      repository.deleteReel.mockResolvedValue('forbidden');
+      await expect(
+        service.deleteReel(reelId, otherId),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 });

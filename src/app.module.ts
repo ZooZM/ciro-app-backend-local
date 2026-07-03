@@ -46,6 +46,13 @@ import * as Joi from 'joi';
         TRANSLATION_LOW_BALANCE_SECONDS: Joi.number().default(30),
         TRANSLATION_ACTIVATION_MIN_SECONDS: Joi.number().default(1),
         TRANSLATION_WORKER_ROLE: Joi.string().default('translation-worker'),
+
+        // Reels content moderation (specs/021-reels-video-feed, v3 upload)
+        MODERATION_PROVIDER: Joi.string()
+          .valid('stub', 'sightengine')
+          .default('stub'),
+        SIGHTENGINE_API_USER: Joi.string().optional().allow(''),
+        SIGHTENGINE_API_SECRET: Joi.string().optional().allow(''),
       }),
     }),
 
@@ -74,6 +81,10 @@ import * as Joi from 'joi';
         connection: {
           url:
             configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+          // Required by BullMQ Workers (v3 reels-moderation queue is the
+          // first Worker this app runs) — blocking commands are
+          // incompatible with ioredis's default per-request retry cap.
+          maxRetriesPerRequest: null,
         },
       }),
     }),

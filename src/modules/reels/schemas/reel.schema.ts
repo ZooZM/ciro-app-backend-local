@@ -14,7 +14,39 @@ export class ReelMention {
 
 export const ReelMentionSchema = SchemaFactory.createForClass(ReelMention);
 
-@Schema({ timestamps: { createdAt: true, updatedAt: false } })
+// v3 (specs/021-reels-video-feed FR-061): the reel moderation status state
+// machine. `pendingModeration` is the only entry state for uploads; the
+// BullMQ moderation worker is the only writer of subsequent transitions.
+export enum ReelStatus {
+  PENDING_MODERATION = 'pending_moderation',
+  PUBLISHED = 'published',
+  REJECTED = 'rejected',
+}
+
+// v3: the spec's "Moderation Result" entity, embedded 1:1 with its reel —
+// nothing ever queries a moderation result independently of its reel.
+@Schema({ _id: false })
+export class ModerationResult {
+  @Prop({ type: String, enum: ['clean', 'flagged'], required: true })
+  verdict: 'clean' | 'flagged';
+
+  @Prop({ type: String, enum: ['video', 'description'], required: false })
+  flaggedSource?: 'video' | 'description';
+
+  @Prop({ type: [String], default: [] })
+  categories: string[];
+
+  @Prop({ required: false })
+  providerRef?: string;
+
+  @Prop({ required: true })
+  completedAt: Date;
+}
+
+export const ModerationResultSchema =
+  SchemaFactory.createForClass(ModerationResult);
+
+@Schema({ timestamps: { createdAt: true, updatedAt: true } })
 export class Reel {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   creatorId: Types.ObjectId;
@@ -22,7 +54,9 @@ export class Reel {
   @Prop({ required: true })
   videoUrl: string;
 
-  @Prop({ required: true })
+  // v3 (FR-060): the thumbnail is optional on upload — seeded/CDN content
+  // always has one, but a user upload may not attach one.
+  @Prop({ default: '' })
   thumbnailUrl: string;
 
   // FR-047: supports #hashtags and @mentions; parsed at write time.
@@ -37,6 +71,26 @@ export class Reel {
   // Only @mentions that resolve to an existing user (FR-047).
   @Prop({ type: [ReelMentionSchema], default: [] })
   mentions: ReelMention[];
+
+  // v3 (FR-061): moderation status state machine. New uploads default to
+  // pending; only `published` reels are visible to non-owners on any
+  // surface (ReelsService.isVisible). The moderation worker is the only
+  // writer of transitions out of `pending_moderation` (guarded update).
+  @Prop({
+    type: String,
+    enum: ReelStatus,
+    default: ReelStatus.PENDING_MODERATION,
+    required: true,
+  })
+  status: ReelStatus;
+
+  // v3: set by the worker on the clean-verdict transition (FR-063).
+  @Prop({ required: false })
+  publishedAt?: Date;
+
+  // v3: written once by the worker on either transition (FR-064).
+  @Prop({ type: ModerationResultSchema, required: false })
+  moderation?: ModerationResult;
 
   // Stored counters (FR-055) — updated via $inc alongside the relation
   // write that causes the change; never computed by aggregation on read.
@@ -53,13 +107,21 @@ export class Reel {
   sharesCount: number;
 
   createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export const ReelSchema = SchemaFactory.createForClass(Reel);
 
-// Feed cursor: newest first, `_id` as a stable tiebreak for same-millisecond seeds.
-ReelSchema.index({ createdAt: -1, _id: -1 });
-// Creator-scoped feed / profile grid.
-ReelSchema.index({ creatorId: 1, createdAt: -1 });
-// Hashtag feed exact-match + order (FR-047a); also backs substring search (R11).
+// v3: feed cursor gains a `status` equality prefix — non-owner reads always
+// filter to `published`, so this keeps the cursor pattern index-covered
+// (replaces the v2 { createdAt: -1, _id: -1 } index).
+ReelSchema.index({ status: 1, createdAt: -1, _id: -1 });
+// v3: creator-scoped feed / profile grid — others filter `published`, the
+// owner reads all statuses (replaces the v2 { creatorId, createdAt } index).
+ReelSchema.index({ creatorId: 1, status: 1, createdAt: -1 });
+// Hashtag feed exact-match + order (FR-047a); also backs substring search
+// (R11); the service applies the status filter on top of this index.
 ReelSchema.index({ hashtags: 1, createdAt: -1 });
+// v3 (R17): pending-sweep scan — re-enqueue reels stuck in
+// `pending_moderation` past a staleness threshold.
+ReelSchema.index({ status: 1, updatedAt: 1 });

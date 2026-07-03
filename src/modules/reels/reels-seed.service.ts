@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { Reel, ReelDocument } from './schemas/reel.schema';
+import { Reel, ReelDocument, ReelStatus } from './schemas/reel.schema';
 import { ReelLike, ReelLikeDocument } from './schemas/reel-like.schema';
 import { ReelShare, ReelShareDocument } from './schemas/reel-share.schema';
 import {
@@ -87,6 +87,7 @@ export class ReelsSeedService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.backfillUsernames();
+    await this.backfillStatus();
 
     const existingReels = await this.reelModel.countDocuments().exec();
     if (existingReels > 0) {
@@ -94,6 +95,27 @@ export class ReelsSeedService implements OnModuleInit {
       return;
     }
     await this.seed();
+  }
+
+  /**
+   * v3 (FR-061): reels created before the moderation pipeline shipped have
+   * no `status` field. They were vetted at seed time (or are pre-existing
+   * production content), so they backfill straight to `published` — never
+   * silently drop out of every feed/profile/search surface. Idempotent:
+   * a no-op on repeat boots once every doc has a status.
+   */
+  private async backfillStatus(): Promise<void> {
+    const result = await this.reelModel
+      .updateMany(
+        { status: { $exists: false } },
+        { $set: { status: ReelStatus.PUBLISHED, publishedAt: new Date() } },
+      )
+      .exec();
+    if (result.modifiedCount > 0) {
+      this.logger.log(
+        `Backfilled status=published for ${result.modifiedCount} pre-v3 reel(s)`,
+      );
+    }
   }
 
   /** Real (non-seeded) users predate `username` — backfill so they can be @mentioned/searched. */
@@ -159,6 +181,7 @@ export class ReelsSeedService implements OnModuleInit {
         this.userModel,
       );
 
+      const seededAt = daysAgo(videoCount - i);
       const reel = await this.reelModel.create({
         creatorId: creator._id,
         videoUrl: SAMPLE_VIDEO_URLS[i % SAMPLE_VIDEO_URLS.length],
@@ -169,7 +192,11 @@ export class ReelsSeedService implements OnModuleInit {
           userId: new Types.ObjectId(m.userId),
           username: m.username,
         })),
-        createdAt: daysAgo(videoCount - i),
+        // v3 (FR-061): demo catalog is vetted at seed time — enters
+        // directly as published, never through the moderation pipeline.
+        status: ReelStatus.PUBLISHED,
+        publishedAt: seededAt,
+        createdAt: seededAt,
       });
       reelDocs.push(reel);
     }

@@ -7,18 +7,23 @@ export enum NotificationEventType {
   NEW_FOLLOWER = 'newFollower',
   REEL_LIKE = 'reelLike',
   REEL_MENTION = 'reelMention',
+  // v3 (FR-064): system-originated — the moderation worker rejected an
+  // uploaded reel. No actor; the self-skip rule does not apply to it.
+  REEL_REJECTED = 'reelRejected',
 }
 
 // FR-054: durable record of a notification-worthy action, written before the
 // FCM push fan-out is attempted. `actorId != recipientId` is enforced in the
-// service layer — a user's own actions on their own content never notify.
+// service layer for actor-driven types — a user's own actions on their own
+// content never notify. v3: `actorId` is optional/null for system-originated
+// events (`reelRejected`), which bypass the self-skip rule entirely.
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class NotificationEvent {
   @Prop({ type: String, enum: NotificationEventType, required: true })
   type: NotificationEventType;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  actorId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false, default: null })
+  actorId?: Types.ObjectId | null;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   recipientId: Types.ObjectId;
