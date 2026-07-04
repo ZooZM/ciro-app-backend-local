@@ -22,6 +22,7 @@
     "docker:local:down": "docker compose -f docker-compose.local.yml down"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@google-cloud/speech": "^7.3.2",
     "@google-cloud/translate": "^9.4.2",
     "@livekit/agents": "^1.4.5",

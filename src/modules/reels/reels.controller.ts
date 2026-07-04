@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Post,
   Query,
@@ -14,11 +15,17 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { basename, dirname, extname, join } from 'path';
 import { mkdirSync } from 'fs';
 import { unlink, open } from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { parseFile } from 'music-metadata';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+
+const execFileAsync = promisify(execFile);
+const FFMPEG_BIN = ffmpegInstaller.path;
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ReelsService } from './reels.service';
 import { CommentsQueryDto, FeedQueryDto } from './dto/feed-query.dto';
@@ -40,6 +47,8 @@ type UploadFiles = {
 @UseGuards(JwtAuthGuard)
 @Controller('api/reels')
 export class ReelsController {
+  private readonly logger = new Logger(ReelsController.name);
+
   constructor(private readonly reelsService: ReelsService) {}
 
   // NOTE: static routes (liked/saved/search) MUST stay above the `:id`
@@ -126,9 +135,14 @@ export class ReelsController {
       throw err;
     }
 
+    // Defense-in-depth for playback latency: guarantee the served MP4 has its
+    // moov atom at the front (+faststart) even if the client skipped its own
+    // normalize pass. Best-effort — falls back to the original file on failure.
+    const videoFilename = await this.remuxFaststart(videoFile.path);
+
     return this.reelsService.createReel({
       creatorId: req.user.userId,
-      videoUrl: `/uploads/reels/videos/${videoFile.filename}`,
+      videoUrl: `/uploads/reels/videos/${videoFilename}`,
       thumbnailUrl: thumbnailFile
         ? `/uploads/reels/thumbs/${thumbnailFile.filename}`
         : '',
@@ -284,6 +298,42 @@ export class ReelsController {
       return undefined;
     } finally {
       await fh?.close();
+    }
+  }
+
+  /**
+   * Stream-copy remux that relocates the MP4 `moov` atom to the front of the
+   * file (`+faststart`). A moov-at-end file forces a progressively-downloading
+   * player to fetch the whole file before it can start decoding, which shows
+   * up as heavy stutter on the *first* playback that vanishes once cached.
+   *
+   * The Flutter client already re-encodes with `+faststart`, so this is
+   * defense-in-depth for any path that skips that (an older build, a direct
+   * API call). `-c copy` means no re-encode — sub-second and lossless. Fully
+   * best-effort: on any failure we keep and serve the original file rather
+   * than fail the upload. Returns the filename to serve (new or original).
+   */
+  private async remuxFaststart(inputPath: string): Promise<string> {
+    const outputPath = join(dirname(inputPath), `${randomUUID()}.mp4`);
+    try {
+      await execFileAsync(FFMPEG_BIN, [
+        '-i',
+        inputPath,
+        '-c',
+        'copy',
+        '-movflags',
+        '+faststart',
+        '-y',
+        outputPath,
+      ]);
+      await unlink(inputPath).catch(() => undefined);
+      return basename(outputPath);
+    } catch (err) {
+      this.logger.warn(
+        `faststart remux failed for ${inputPath}: ${(err as Error).message} — serving original`,
+      );
+      await unlink(outputPath).catch(() => undefined);
+      return basename(inputPath);
     }
   }
 
