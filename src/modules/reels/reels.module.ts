@@ -6,6 +6,8 @@ import { HttpModule } from '@nestjs/axios';
 import { ReelsController } from './reels.controller';
 import { ReelsUsersController } from './reels-users.controller';
 import { ReelsRedirectController } from './reels-redirect.controller';
+import { ReelsAdminController } from './reels-admin.controller';
+import { AdminKeyGuard } from './admin-key.guard';
 import { ReelsService } from './reels.service';
 import { ReelsDbRepository } from './reels-db.repository';
 import { ReelsSeedService } from './reels-seed.service';
@@ -24,6 +26,8 @@ import { ReelSave, ReelSaveSchema } from './schemas/reel-save.schema';
 import { ReelView, ReelViewSchema } from './schemas/reel-view.schema';
 import { ReelShare, ReelShareSchema } from './schemas/reel-share.schema';
 import { ReelComment, ReelCommentSchema } from './schemas/reel-comment.schema';
+import { ReelReport, ReelReportSchema } from './schemas/reel-report.schema';
+import { ReelRepost, ReelRepostSchema } from './schemas/reel-repost.schema';
 import { Follow, FollowSchema } from './schemas/follow.schema';
 import {
   NotificationEvent,
@@ -44,6 +48,8 @@ import {
       { name: ReelView.name, schema: ReelViewSchema },
       { name: ReelShare.name, schema: ReelShareSchema },
       { name: ReelComment.name, schema: ReelCommentSchema },
+      { name: ReelReport.name, schema: ReelReportSchema },
+      { name: ReelRepost.name, schema: ReelRepostSchema },
       { name: Follow.name, schema: FollowSchema },
       { name: NotificationEvent.name, schema: NotificationEventSchema },
     ]),
@@ -54,7 +60,12 @@ import {
     // the global `BullModule.forRootAsync` registration in app.module.ts.
     BullModule.registerQueue({ name: REELS_MODERATION_QUEUE }),
   ],
-  controllers: [ReelsController, ReelsUsersController, ReelsRedirectController],
+  controllers: [
+    ReelsController,
+    ReelsUsersController,
+    ReelsRedirectController,
+    ReelsAdminController,
+  ],
   providers: [
     ReelsService,
     ReelsDbRepository,
@@ -62,6 +73,7 @@ import {
     ReelsNotificationsService,
     ReelsModerationService,
     ReelsModerationProcessor,
+    AdminKeyGuard,
     { provide: REELS_REPOSITORY, useExisting: ReelsDbRepository },
     // v3 (R15): 'stub' by default (dev/test, no credentials); 'sightengine'
     // for the real provider. Swapping providers later is a new class here.

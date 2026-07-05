@@ -1,6 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -12,7 +15,7 @@ import { Model, Types } from 'mongoose';
 import { Queue } from 'bullmq';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { REELS_REPOSITORY } from './reels.repository';
-import type { ReelsRepository } from './reels.repository';
+import type { ReelReportReasonValue, ReelsRepository } from './reels.repository';
 import { FeedQueryDto, CommentsQueryDto } from './dto/feed-query.dto';
 import { SearchQueryDto } from './dto/search-query.dto';
 import { ReelsNotificationsService } from './reels-notifications.service';
@@ -108,6 +111,17 @@ export class ReelsService {
       limit: query.limit ?? 10,
       creatorId: query.creatorId,
       hashtag: query.hashtag,
+      excludeCreatorIds,
+    });
+  }
+
+  /** v4 (FR-075): Following tab — original reels only, no reposts. */
+  async getFollowingFeed(viewerId: string, query: FeedQueryDto) {
+    const excludeCreatorIds = await this.getBlockSet(viewerId);
+    return this.repository.listFollowingFeed({
+      viewerId,
+      cursor: query.cursor,
+      limit: query.limit ?? 10,
       excludeCreatorIds,
     });
   }
@@ -284,5 +298,65 @@ export class ReelsService {
       throw new ForbiddenException('Only the owner can delete this reel');
     }
     return { deleted: true as const };
+  }
+
+  /** v4 (FR-069/FR-070): report a reel; may trigger the auto-hide transition. */
+  async reportReel(
+    id: string,
+    viewerId: string,
+    dto: { reason: ReelReportReasonValue; customReason?: string },
+  ) {
+    const result = await this.repository.reportReel(
+      id,
+      viewerId,
+      dto.reason,
+      dto.customReason,
+    );
+    if (result === null) throw new NotFoundException('Reel not found');
+    if (result === 'self') {
+      throw new BadRequestException('Cannot report your own reel');
+    }
+    if (result === 'rate_limited') {
+      throw new HttpException(
+        'Daily report limit reached',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return result;
+  }
+
+  /** v4 (FR-071): admin review backlog. */
+  async listHiddenReels(query: { cursor?: string; limit?: number }) {
+    return this.repository.listHiddenReels({
+      cursor: query.cursor,
+      limit: query.limit ?? 20,
+    });
+  }
+
+  /** v4 (FR-071): admin restore/reject a hidden reel. */
+  async adminModerateReel(id: string, action: 'restore' | 'reject') {
+    const result = await this.repository.adminModerateReel(id, action);
+    if (result === null) throw new NotFoundException('Reel not found');
+    if (result === 'not_hidden') {
+      throw new ConflictException('Reel is not hidden');
+    }
+    return result;
+  }
+
+  /** v4 (FR-073): explicit repost. */
+  async repostReel(id: string, viewerId: string) {
+    const result = await this.repository.repostReel(id, viewerId);
+    if (result === null) throw new NotFoundException('Reel not found');
+    if (result === 'self') {
+      throw new BadRequestException('Cannot repost your own reel');
+    }
+    return result;
+  }
+
+  /** v4 (FR-073): explicit un-repost. */
+  async unrepostReel(id: string, viewerId: string) {
+    const result = await this.repository.unrepostReel(id, viewerId);
+    if (result === null) throw new NotFoundException('Reel not found');
+    return result;
   }
 }

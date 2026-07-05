@@ -15,12 +15,16 @@ export class ReelMention {
 export const ReelMentionSchema = SchemaFactory.createForClass(ReelMention);
 
 // v3 (specs/021-reels-video-feed FR-061): the reel moderation status state
-// machine. `pendingModeration` is the only entry state for uploads; the
-// BullMQ moderation worker is the only writer of subsequent transitions.
+// machine. `pendingModeration` is the only entry state for uploads.
+// v4 (FR-070): `hidden` added — a *third* status writer (the report
+// service, alongside the moderation worker and the admin endpoint) can
+// now transition `published -> hidden` when the unique-reporter count
+// crosses the auto-hide threshold. See data-model.md v4's state machine.
 export enum ReelStatus {
   PENDING_MODERATION = 'pending_moderation',
   PUBLISHED = 'published',
   REJECTED = 'rejected',
+  HIDDEN = 'hidden',
 }
 
 // v3: the spec's "Moderation Result" entity, embedded 1:1 with its reel —
@@ -106,6 +110,21 @@ export class Reel {
   @Prop({ default: 0 })
   sharesCount: number;
 
+  // v4 (FR-070): stored counter of unique reporters. `$inc` only on a real
+  // `reel_reports` insert; the insert that reaches
+  // `REEL_REPORT_AUTOHIDE_THRESHOLD` triggers the guarded hide transition.
+  // Never exposed on non-owner-facing DTOs.
+  @Prop({ default: 0 })
+  reportsCount: number;
+
+  // v4 (FR-070/FR-071): set `true` only by the admin restore transition and
+  // never unset — "one auto-hide per reel ever". A restored reel keeps
+  // accumulating reports for audit but is permanently immune to the
+  // auto-hide threshold; only another explicit admin action can move it
+  // out of `published` again.
+  @Prop({ default: false })
+  adminRestored: boolean;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -123,5 +142,9 @@ ReelSchema.index({ creatorId: 1, status: 1, createdAt: -1 });
 // (R11); the service applies the status filter on top of this index.
 ReelSchema.index({ hashtags: 1, createdAt: -1 });
 // v3 (R17): pending-sweep scan — re-enqueue reels stuck in
-// `pending_moderation` past a staleness threshold.
+// `pending_moderation` past a staleness threshold. v4: this same
+// { status, updatedAt } shape also backs the admin hidden-reel backlog
+// (GET /moderation/hidden, FR-071) — `updatedAt` advances on the hide
+// transition, so equality on `status: 'hidden'` + a descending scan of
+// this index gives "most recently hidden first" for free.
 ReelSchema.index({ status: 1, updatedAt: 1 });

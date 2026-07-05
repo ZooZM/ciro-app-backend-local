@@ -1,8 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Reel, ReelDocument, ReelStatus } from './schemas/reel.schema';
+import {
+  ReelReport,
+  ReelReportDocument,
+  ReelReportReason,
+} from './schemas/reel-report.schema';
+import { ReelRepost, ReelRepostDocument } from './schemas/reel-repost.schema';
 import {
   NotificationEvent,
   NotificationEventDocument,
@@ -19,9 +26,11 @@ import {
 } from './schemas/reel-comment.schema';
 import { Follow, FollowDocument } from './schemas/follow.schema';
 import {
+  AdminHiddenReelDto,
   CommentDto,
   CreatorProfileDto,
   ReelDto,
+  ReelReportReasonValue,
   ReelsRepository,
   ReelVideoRecord,
   UserSearchResultDto,
@@ -55,6 +64,11 @@ export class ReelsDbRepository implements ReelsRepository {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(NotificationEvent.name)
     private readonly notificationEventModel: Model<NotificationEventDocument>,
+    @InjectModel(ReelReport.name)
+    private readonly reportModel: Model<ReelReportDocument>,
+    @InjectModel(ReelRepost.name)
+    private readonly repostModel: Model<ReelRepostDocument>,
+    private readonly configService: ConfigService,
   ) {}
 
   // ── Id helpers ─────────────────────────────────────────────────────────
@@ -84,7 +98,7 @@ export class ReelsDbRepository implements ReelsRepository {
     const creatorIds = [...new Set(reels.map((r) => r.creatorId.toString()))];
     const videoIds = reels.map((r) => r._id);
 
-    const [creators, followed, liked, saved] = await Promise.all([
+    const [creators, followed, liked, saved, reposted] = await Promise.all([
       this.userModel
         .find({ _id: { $in: creatorIds.map((id) => new Types.ObjectId(id)) } })
         .select('_id name username avatarUrl')
@@ -113,12 +127,22 @@ export class ReelsDbRepository implements ReelsRepository {
             .lean()
             .exec()
         : [],
+      // v4 (FR-073): whether the CALLER reposted this reel (drives the
+      // action-column button's active state) — independent of whether the
+      // item is a For You repost-injected copy (that's `repostedBy` below).
+      viewerObjectId
+        ? this.repostModel
+            .find({ reposterId: viewerObjectId, videoId: { $in: videoIds } })
+            .lean()
+            .exec()
+        : [],
     ]);
 
     const creatorById = new Map(creators.map((c) => [c._id.toString(), c]));
     const followedSet = new Set(followed.map((f) => f.followeeId.toString()));
     const likedSet = new Set(liked.map((l) => l.videoId.toString()));
     const savedSet = new Set(saved.map((s) => s.videoId.toString()));
+    const repostedSet = new Set(reposted.map((r) => r.videoId.toString()));
 
     return reels.map((r) => {
       const creator = creatorById.get(r.creatorId.toString());
@@ -147,6 +171,11 @@ export class ReelsDbRepository implements ReelsRepository {
         sharesCount: r.sharesCount,
         viewerLiked: likedSet.has(r._id.toString()),
         viewerSaved: savedSet.has(r._id.toString()),
+        // v4: default null — the For You merge (listFeed) overwrites this
+        // on its repost-injected items only; every other path (including
+        // the Following feed) always serves organic items.
+        repostedBy: null,
+        viewerReposted: repostedSet.has(r._id.toString()),
       };
     });
   }
@@ -191,6 +220,98 @@ export class ReelsDbRepository implements ReelsRepository {
     return {
       $or: [{ status: ReelStatus.PUBLISHED }, { creatorId: viewerObjectId }],
     };
+  }
+
+  /**
+   * v4 (FR-076, R20): reels reposted by users the viewer follows (or the
+   * viewer themselves), attributed to the MOST RECENT qualifying reposter
+   * per reel. Reposter-edge blocks are applied here (FR-078) — independent
+   * of the creator-edge `excludeCreatorIds` filter the caller also applies.
+   * "Still followed" is implicit: `followeeIds` is read fresh on every
+   * call, so an unfollow removes the injection on the very next request.
+   */
+  private async getRepostAttributions(
+    viewerId: string,
+    excludeCreatorIds: string[],
+  ): Promise<
+    Map<string, { id: string; username: string; name: string; avatarUrl: string }>
+  > {
+    const viewerObjectId = this.toObjectId(viewerId);
+    if (!viewerObjectId) return new Map();
+
+    const follows = await this.followModel
+      .find({ followerId: viewerObjectId })
+      .select('followeeId')
+      .lean()
+      .exec();
+    const reposterIds = [
+      ...new Set([
+        ...follows.map((f) => f.followeeId.toString()),
+        viewerId,
+      ]),
+    ]
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+    if (reposterIds.length === 0) return new Map();
+
+    const reposts = await this.repostModel
+      .find({ reposterId: { $in: reposterIds } })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    if (reposts.length === 0) return new Map();
+
+    // Most-recent-first order already sorted above; keep only the first
+    // (= most recent) repost seen per videoId.
+    const latestByVideo = new Map<string, (typeof reposts)[number]>();
+    for (const r of reposts) {
+      const key = r.videoId.toString();
+      if (!latestByVideo.has(key)) latestByVideo.set(key, r);
+    }
+
+    const videoIds = [...latestByVideo.keys()].map((id) => this.toObjectId(id));
+    const reposterIdsNeeded = [
+      ...new Set([...latestByVideo.values()].map((r) => r.reposterId.toString())),
+    ].map((id) => this.toObjectId(id));
+
+    const [reels, reposterUsers] = await Promise.all([
+      this.reelModel
+        .find({
+          _id: { $in: videoIds },
+          ...this.excludeFilter(excludeCreatorIds),
+          status: ReelStatus.PUBLISHED,
+        })
+        .select('_id')
+        .lean()
+        .exec(),
+      this.userModel
+        .find({ _id: { $in: reposterIdsNeeded } })
+        .select('_id username name avatarUrl')
+        .lean()
+        .exec(),
+    ]);
+    const visibleVideoIds = new Set(reels.map((r) => r._id.toString()));
+    const excludeReposterSet = new Set(excludeCreatorIds);
+    const reposterById = new Map(reposterUsers.map((u) => [u._id.toString(), u]));
+
+    const attributions = new Map<
+      string,
+      { id: string; username: string; name: string; avatarUrl: string }
+    >();
+    for (const [videoId, repost] of latestByVideo) {
+      if (!visibleVideoIds.has(videoId)) continue; // source no longer published/blocked
+      const reposterId = repost.reposterId.toString();
+      if (excludeReposterSet.has(reposterId)) continue; // FR-078 reposter-edge block
+      const reposter = reposterById.get(reposterId);
+      if (!reposter) continue;
+      attributions.set(videoId, {
+        id: reposterId,
+        username: reposter.username ?? '',
+        name: reposter.name,
+        avatarUrl: reposter.avatarUrl ?? '',
+      });
+    }
+    return attributions;
   }
 
   // ── ReelsRepository ────────────────────────────────────────────────────
@@ -271,17 +392,110 @@ export class ReelsDbRepository implements ReelsRepository {
     }
 
     // Main feed loops the catalog indefinitely — nextCursor is never null (FR-007).
-    const docs: ReelDocument[] = [];
     const sorted = await this.reelModel
       .find(filter)
       .sort({ createdAt: -1, _id: -1 })
       .exec();
-    for (let i = 0; i < params.limit; i++) {
-      docs.push(sorted[(offset + i) % sorted.length]);
+
+    // v4 (FR-076): this IS the For You feed — merge in followees' (+ the
+    // viewer's own) reposts. Scoped feeds (creatorId/hashtag) never reach
+    // this branch, matching FR-075's "Following has no reposts" rule and
+    // FR-026/FR-047a's existing creator/hashtag-scoped semantics.
+    const attributions = await this.getRepostAttributions(
+      params.viewerId,
+      params.excludeCreatorIds,
+    );
+
+    const docs: ReelDocument[] = [];
+    const byId = new Map(sorted.map((d) => [d._id.toString(), d]));
+    if (offset === 0 && attributions.size > 0) {
+      // R20: reposts are surfaced with priority on the very first page —
+      // the simplest faithful reading of "distribution to followers" for a
+      // catalog small enough that natural rotation would otherwise bury
+      // them. Any residual duplicate on a later loop cycle is absorbed by
+      // the client-side pagination dedup (ReelsFeedBloc, T158).
+      const seeded = new Set<string>();
+      for (const [videoId] of attributions) {
+        if (docs.length >= params.limit) break;
+        const doc = byId.get(videoId);
+        if (!doc || seeded.has(videoId)) continue;
+        docs.push(doc);
+        seeded.add(videoId);
+      }
+      for (let i = 0; docs.length < params.limit && i < sorted.length; i++) {
+        const doc = sorted[i % sorted.length];
+        const id = doc._id.toString();
+        if (seeded.has(id)) continue;
+        docs.push(doc);
+        seeded.add(id);
+      }
+    } else {
+      for (let i = 0; i < params.limit; i++) {
+        docs.push(sorted[(offset + i) % sorted.length]);
+      }
     }
+
+    const items = await this.hydrate(docs, params.viewerId);
+    // Attach repostedBy to whichever page items happen to carry an
+    // attribution (the prepended ones on page 0, or any natural-rotation
+    // item on later pages/loop cycles that matches).
+    for (const item of items) {
+      const attribution = attributions.get(item.id);
+      if (attribution) item.repostedBy = attribution;
+    }
+
+    return {
+      items,
+      nextCursor: String(offset + params.limit),
+    };
+  }
+
+  /**
+   * v4 (FR-075): originals only, from users the viewer follows. Blocked
+   * followees are filtered out of the id list up front (rather than
+   * combining `$in`/`$nin` on the same `creatorId` field, which Mongo
+   * can't merge via plain-object `Object.assign`).
+   */
+  async listFollowingFeed(params: {
+    viewerId: string;
+    cursor?: string;
+    limit: number;
+    excludeCreatorIds: string[];
+  }): Promise<{ items: ReelDto[]; nextCursor: string | null }> {
+    const viewerObjectId = this.toObjectId(params.viewerId);
+    if (!viewerObjectId) return { items: [], nextCursor: null };
+
+    const follows = await this.followModel
+      .find({ followerId: viewerObjectId })
+      .select('followeeId')
+      .lean()
+      .exec();
+    const excludeSet = new Set(params.excludeCreatorIds);
+    const followeeIds = follows
+      .map((f) => f.followeeId.toString())
+      .filter((id) => !excludeSet.has(id))
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+    if (followeeIds.length === 0) return { items: [], nextCursor: null };
+
+    const offset = this.parseCursor(params.cursor);
+    const filter: Record<string, unknown> = {
+      creatorId: { $in: followeeIds },
+      ...this.visibilityFilter(params.viewerId),
+    };
+    const total = await this.reelModel.countDocuments(filter).exec();
+    if (total === 0) return { items: [], nextCursor: null };
+
+    const docs = await this.reelModel
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(params.limit)
+      .exec();
+    const nextOffset = offset + params.limit;
     return {
       items: await this.hydrate(docs, params.viewerId),
-      nextCursor: String(offset + params.limit),
+      nextCursor: nextOffset < total ? String(nextOffset) : null,
     };
   }
 
@@ -811,6 +1025,235 @@ export class ReelsDbRepository implements ReelsRepository {
     ]);
 
     return { deleted: true, videoUrl, thumbnailUrl };
+  }
+
+  /**
+   * v4 (FR-069/FR-070): report a published reel. A duplicate (unique index
+   * on {videoId, reporterId}) is an idempotent no-op — no re-count, no
+   * re-check. A real insert `$inc`s `reportsCount`; crossing
+   * `REEL_REPORT_AUTOHIDE_THRESHOLD` fires a guarded `published -> hidden`
+   * transition (precondition also excludes `adminRestored: true` reels —
+   * "one auto-hide per reel ever", FR-070). The daily rate limit
+   * (`REEL_REPORT_DAILY_LIMIT`) uses a rolling 24h window, not calendar-day,
+   * to avoid timezone/midnight-reset ambiguity.
+   */
+  async reportReel(
+    id: string,
+    viewerId: string,
+    reason: ReelReportReasonValue,
+    customReason: string | undefined,
+  ): Promise<
+    { reported: true; alreadyReported: boolean } | 'self' | 'rate_limited' | null
+  > {
+    const videoId = this.toObjectId(id);
+    const userId = this.toObjectId(viewerId);
+    if (!videoId || !userId) return null;
+
+    // v4 (FR-069): reports are accepted only against published reels —
+    // non-published reels follow the unknown-reel path (FR-061).
+    const reel = await this.reelModel
+      .findOne({ _id: videoId, status: ReelStatus.PUBLISHED })
+      .exec();
+    if (!reel) return null;
+    if (reel.creatorId.equals(userId)) return 'self';
+
+    const dailyLimit =
+      this.configService.get<number>('REEL_REPORT_DAILY_LIMIT') ?? 20;
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentCount = await this.reportModel
+      .countDocuments({ reporterId: userId, createdAt: { $gte: since } })
+      .exec();
+    if (recentCount >= dailyLimit) return 'rate_limited';
+
+    try {
+      await this.reportModel.create({
+        videoId,
+        reporterId: userId,
+        reason,
+        // Only `other` carries a custom reason (data-model.md v4: "absent otherwise").
+        customReason:
+          reason === ReelReportReason.OTHER ? customReason : undefined,
+      });
+    } catch {
+      // Duplicate-key race — another request already recorded this
+      // reporter's report for this reel; idempotent no-op (FR-069).
+      return { reported: true, alreadyReported: true };
+    }
+
+    const threshold =
+      this.configService.get<number>('REEL_REPORT_AUTOHIDE_THRESHOLD') ?? 25;
+    const updated = await this.reelModel
+      .findOneAndUpdate(
+        { _id: videoId },
+        { $inc: { reportsCount: 1 } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+
+    if (updated && updated.reportsCount >= threshold) {
+      // FR-070: guarded — precondition excludes reels already moved out of
+      // `published` (by this same threshold check racing another report, or
+      // by any other writer) and reels an admin has ever restored. Under a
+      // concurrent report crossing the threshold at the same instant, only
+      // one of these updates actually matches and flips the status; the
+      // other is a harmless no-op — exactly-once (SC-021).
+      await this.reelModel
+        .findOneAndUpdate(
+          {
+            _id: videoId,
+            status: ReelStatus.PUBLISHED,
+            adminRestored: { $ne: true },
+          },
+          { $set: { status: ReelStatus.HIDDEN } },
+        )
+        .exec();
+    }
+
+    return { reported: true, alreadyReported: false };
+  }
+
+  /** v4 (FR-071): admin review backlog — hidden reels, newest-hidden-first. */
+  async listHiddenReels(params: {
+    cursor?: string;
+    limit: number;
+  }): Promise<{ items: AdminHiddenReelDto[]; nextCursor: string | null }> {
+    const offset = this.parseCursor(params.cursor);
+    const filter = { status: ReelStatus.HIDDEN };
+    const total = await this.reelModel.countDocuments(filter).exec();
+    if (total === 0) return { items: [], nextCursor: null };
+
+    // `updatedAt` advances on the hide transition (timestamps: true), so
+    // sorting by it descending gives "most recently hidden first" — the
+    // same { status, updatedAt } index used by the R17 pending-sweep.
+    const docs = await this.reelModel
+      .find(filter)
+      .sort({ updatedAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(params.limit)
+      .exec();
+
+    const reelIds = docs.map((d) => d._id);
+    const creatorIds = [...new Set(docs.map((d) => d.creatorId.toString()))];
+    const [creators, reports] = await Promise.all([
+      this.userModel
+        .find({ _id: { $in: creatorIds.map((id) => new Types.ObjectId(id)) } })
+        .select('_id username')
+        .lean()
+        .exec(),
+      this.reportModel
+        .find({ videoId: { $in: reelIds } })
+        .sort({ createdAt: 1 })
+        .lean()
+        .exec(),
+    ]);
+    const creatorById = new Map(creators.map((c) => [c._id.toString(), c]));
+    const reportsByVideo = new Map<string, typeof reports>();
+    for (const r of reports) {
+      const key = r.videoId.toString();
+      const existing = reportsByVideo.get(key);
+      if (existing) existing.push(r);
+      else reportsByVideo.set(key, [r]);
+    }
+
+    const nextOffset = offset + params.limit;
+    return {
+      items: docs.map((d) => ({
+        id: d._id.toString(),
+        creator: {
+          id: d.creatorId.toString(),
+          username: creatorById.get(d.creatorId.toString())?.username ?? '',
+        },
+        videoUrl: d.videoUrl,
+        thumbnailUrl: d.thumbnailUrl,
+        description: d.description,
+        hiddenAt: (d.updatedAt as Date).toISOString(),
+        reportsCount: d.reportsCount,
+        reports: (reportsByVideo.get(d._id.toString()) ?? []).map((r) => ({
+          reporterId: r.reporterId.toString(),
+          reason: r.reason,
+          customReason: r.customReason ?? null,
+          createdAt: (r.createdAt as Date).toISOString(),
+        })),
+      })),
+      nextCursor: nextOffset < total ? String(nextOffset) : null,
+    };
+  }
+
+  /**
+   * v4 (FR-071): admin-only `hidden -> published|reject` transition.
+   * `restore` sets `adminRestored: true` — permanent auto-hide immunity
+   * (FR-070); `reportsCount` is left untouched (retained for audit).
+   */
+  async adminModerateReel(
+    id: string,
+    action: 'restore' | 'reject',
+  ): Promise<{ id: string; status: string } | 'not_hidden' | null> {
+    const videoId = this.toObjectId(id);
+    if (!videoId) return null;
+    const reel = await this.reelModel.findById(videoId).exec();
+    if (!reel) return null;
+    if (reel.status !== ReelStatus.HIDDEN) return 'not_hidden';
+
+    const update =
+      action === 'restore'
+        ? { $set: { status: ReelStatus.PUBLISHED, adminRestored: true } }
+        : { $set: { status: ReelStatus.REJECTED } };
+
+    const updated = await this.reelModel
+      .findOneAndUpdate(
+        { _id: videoId, status: ReelStatus.HIDDEN },
+        update,
+        { returnDocument: 'after' },
+      )
+      .exec();
+    // A concurrent admin action already decided it — never double-fire.
+    if (!updated) return 'not_hidden';
+
+    return { id: updated._id.toString(), status: updated.status };
+  }
+
+  /**
+   * v4 (FR-073): explicit repost — always sets the relation. A duplicate
+   * insert (unique index) is caught and treated as already-reposted, same
+   * idempotency posture as the rest of this file's toggles.
+   */
+  async repostReel(
+    id: string,
+    viewerId: string,
+  ): Promise<{ reposted: true } | 'self' | null> {
+    const videoId = this.toObjectId(id);
+    const userId = this.toObjectId(viewerId);
+    if (!videoId || !userId) return null;
+    // v4 (FR-073): reposting is only possible on published reels.
+    const reel = await this.reelModel
+      .findOne({ _id: videoId, status: ReelStatus.PUBLISHED })
+      .exec();
+    if (!reel) return null;
+    if (reel.creatorId.equals(userId)) return 'self';
+
+    try {
+      await this.repostModel.create({ reposterId: userId, videoId });
+    } catch {
+      // Duplicate-key — already reposted; idempotent no-op.
+    }
+    return { reposted: true };
+  }
+
+  /** v4 (FR-073): explicit un-repost — idempotent no-op if none existed. */
+  async unrepostReel(
+    id: string,
+    viewerId: string,
+  ): Promise<{ reposted: false } | null> {
+    const videoId = this.toObjectId(id);
+    const userId = this.toObjectId(viewerId);
+    if (!videoId || !userId) return null;
+    // Not tied to publication status — an owner can always remove their
+    // own repost even if the source reel later left `published`.
+    const reel = await this.reelModel.findById(videoId).exec();
+    if (!reel) return null;
+
+    await this.repostModel.deleteOne({ reposterId: userId, videoId }).exec();
+    return { reposted: false };
   }
 
   /** Only uploaded reels have locally-stored media (`/uploads/...`); seeded/CDN URLs are left alone. */

@@ -53,6 +53,11 @@ import * as Joi from 'joi';
           .default('stub'),
         SIGHTENGINE_API_USER: Joi.string().optional().allow(''),
         SIGHTENGINE_API_SECRET: Joi.string().optional().allow(''),
+
+        // Reels reporting & reposting (specs/021-reels-video-feed, v4)
+        REEL_REPORT_AUTOHIDE_THRESHOLD: Joi.number().default(25),
+        REEL_REPORT_DAILY_LIMIT: Joi.number().default(20),
+        ADMIN_API_KEY: Joi.string().optional().allow(''),
       }),
     }),
 

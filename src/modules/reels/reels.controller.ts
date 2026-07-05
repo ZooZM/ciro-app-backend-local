@@ -32,6 +32,7 @@ import { CommentsQueryDto, FeedQueryDto } from './dto/feed-query.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateReelDto } from './dto/create-reel.dto';
 import { SearchQueryDto } from './dto/search-query.dto';
+import { ReportReelDto } from './dto/report-reel.dto';
 
 const REELS_UPLOAD_DIR = './uploads/reels';
 // FR-060: 100 MB Multer cap (higher than the chat/status 20 MB cap — video).
@@ -68,6 +69,13 @@ export class ReelsController {
   @Get('search')
   searchReels(@Request() req: any, @Query() query: SearchQueryDto) {
     return this.reelsService.searchReels(req.user.userId, query);
+  }
+
+  // v4 (FR-075): Following tab — static route, same ordering rule as
+  // liked/saved/search above.
+  @Get('following')
+  getFollowingFeed(@Request() req: any, @Query() query: FeedQueryDto) {
+    return this.reelsService.getFollowingFeed(req.user.userId, query);
   }
 
   @Get()
@@ -196,6 +204,27 @@ export class ReelsController {
   @Post(':id/save')
   toggleSave(@Request() req: any, @Param('id') id: string) {
     return this.reelsService.toggleSave(id, req.user.userId);
+  }
+
+  // v4 (FR-068/FR-069): report a reel (preset reason or 'other' + custom text).
+  @Post(':id/report')
+  reportReel(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: ReportReelDto,
+  ) {
+    return this.reelsService.reportReel(id, req.user.userId, dto);
+  }
+
+  // v4 (FR-073): explicit repost/un-repost — not a toggle (separate verbs).
+  @Post(':id/repost')
+  repostReel(@Request() req: any, @Param('id') id: string) {
+    return this.reelsService.repostReel(id, req.user.userId);
+  }
+
+  @Delete(':id/repost')
+  unrepostReel(@Request() req: any, @Param('id') id: string) {
+    return this.reelsService.unrepostReel(id, req.user.userId);
   }
 
   /**

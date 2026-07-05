@@ -1,6 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -52,6 +55,12 @@ describe('ReelsService', () => {
       searchReels: jest.fn(),
       searchUsers: jest.fn(),
       deleteReel: jest.fn(),
+      reportReel: jest.fn(),
+      listHiddenReels: jest.fn(),
+      adminModerateReel: jest.fn(),
+      repostReel: jest.fn(),
+      unrepostReel: jest.fn(),
+      listFollowingFeed: jest.fn(),
     };
 
     userModel = {
@@ -283,6 +292,134 @@ describe('ReelsService', () => {
       await expect(
         service.deleteReel(reelId, otherId),
       ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('reportReel (FR-069/FR-070, v4)', () => {
+    it('returns the repository result unchanged on success', async () => {
+      repository.reportReel.mockResolvedValue({
+        reported: true,
+        alreadyReported: false,
+      });
+      const result = await service.reportReel(reelId, viewerId, {
+        reason: 'spam',
+      });
+      expect(result).toEqual({ reported: true, alreadyReported: false });
+    });
+
+    it('passes alreadyReported through unchanged for a duplicate report', async () => {
+      repository.reportReel.mockResolvedValue({
+        reported: true,
+        alreadyReported: true,
+      });
+      const result = await service.reportReel(reelId, viewerId, {
+        reason: 'spam',
+      });
+      expect(result).toEqual({ reported: true, alreadyReported: true });
+    });
+
+    it('throws NotFoundException for an unknown/non-published reel', async () => {
+      repository.reportReel.mockResolvedValue(null);
+      await expect(
+        service.reportReel(reelId, viewerId, { reason: 'spam' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('rejects reporting your own reel with BadRequestException', async () => {
+      repository.reportReel.mockResolvedValue('self');
+      await expect(
+        service.reportReel(reelId, viewerId, { reason: 'spam' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('maps the daily rate limit to a 429 HttpException', async () => {
+      repository.reportReel.mockResolvedValue('rate_limited');
+      const promise = service.reportReel(reelId, viewerId, { reason: 'spam' });
+      await expect(promise).rejects.toBeInstanceOf(HttpException);
+      await promise.catch((err: HttpException) => {
+        expect(err.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      });
+    });
+  });
+
+  describe('admin moderation (FR-071, v4)', () => {
+    it('listHiddenReels defaults to limit 20 and forwards the repository page', async () => {
+      const page = { items: [], nextCursor: null };
+      repository.listHiddenReels.mockResolvedValue(page);
+      const result = await service.listHiddenReels({});
+      expect(repository.listHiddenReels).toHaveBeenCalledWith({
+        cursor: undefined,
+        limit: 20,
+      });
+      expect(result).toBe(page);
+    });
+
+    it('adminModerateReel returns the repository result unchanged on success', async () => {
+      repository.adminModerateReel.mockResolvedValue({
+        id: reelId,
+        status: 'published',
+      });
+      const result = await service.adminModerateReel(reelId, 'restore');
+      expect(result).toEqual({ id: reelId, status: 'published' });
+    });
+
+    it('adminModerateReel throws NotFoundException for an unknown reel', async () => {
+      repository.adminModerateReel.mockResolvedValue(null);
+      await expect(
+        service.adminModerateReel(reelId, 'restore'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('adminModerateReel throws ConflictException when the reel is not hidden', async () => {
+      repository.adminModerateReel.mockResolvedValue('not_hidden');
+      await expect(
+        service.adminModerateReel(reelId, 'reject'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  describe('repost / following feed (FR-073/FR-075, v4)', () => {
+    it('repostReel returns the repository result unchanged on success', async () => {
+      repository.repostReel.mockResolvedValue({ reposted: true });
+      const result = await service.repostReel(reelId, viewerId);
+      expect(result).toEqual({ reposted: true });
+    });
+
+    it('repostReel throws NotFoundException for an unknown/non-published reel', async () => {
+      repository.repostReel.mockResolvedValue(null);
+      await expect(service.repostReel(reelId, viewerId)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('repostReel rejects reposting your own reel with BadRequestException', async () => {
+      repository.repostReel.mockResolvedValue('self');
+      await expect(service.repostReel(reelId, viewerId)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('unrepostReel returns the repository result unchanged on success', async () => {
+      repository.unrepostReel.mockResolvedValue({ reposted: false });
+      const result = await service.unrepostReel(reelId, viewerId);
+      expect(result).toEqual({ reposted: false });
+    });
+
+    it('unrepostReel throws NotFoundException for an unknown reel', async () => {
+      repository.unrepostReel.mockResolvedValue(null);
+      await expect(
+        service.unrepostReel(reelId, viewerId),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('getFollowingFeed defaults to limit 10 and forwards the block set + repository page', async () => {
+      const page = { items: [], nextCursor: null };
+      repository.listFollowingFeed.mockResolvedValue(page);
+      const result = await service.getFollowingFeed(viewerId, {});
+      expect(repository.listFollowingFeed).toHaveBeenCalledWith(
+        expect.objectContaining({ viewerId, cursor: undefined, limit: 10 }),
+      );
+      expect(result).toBe(page);
     });
   });
 });

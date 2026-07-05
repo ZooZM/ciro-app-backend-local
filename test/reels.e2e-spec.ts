@@ -24,6 +24,7 @@ import {
   NotificationEvent,
   NotificationEventDocument,
 } from '../src/modules/reels/schemas/notification-event.schema';
+import { Follow, FollowDocument } from '../src/modules/reels/schemas/follow.schema';
 
 /** A minimal, real, parseable WAV buffer — lets FR-060a's server-side
  * duration check run against a genuine container without needing ffmpeg in
@@ -114,6 +115,7 @@ describe('Reels module (e2e)', () => {
   let userModel: Model<UserDocument>;
   let reelModel: Model<ReelDocument>;
   let notificationEventModel: Model<NotificationEventDocument>;
+  let followModel: Model<FollowDocument>;
   let moderationService: ReelsModerationService;
   let phoneCounter = 0;
 
@@ -188,6 +190,7 @@ describe('Reels module (e2e)', () => {
     notificationEventModel = moduleFixture.get(
       getModelToken(NotificationEvent.name),
     );
+    followModel = moduleFixture.get(getModelToken(Follow.name));
     moderationService = moduleFixture.get(ReelsModerationService);
 
     // Every moderation assertion in this file drives the pipeline via
@@ -676,6 +679,677 @@ describe('Reels module (e2e)', () => {
           .status,
       ).toBe('published');
     });
+  });
+
+  describe('hidden visibility (FR-070, v4)', () => {
+    async function createRawReel(params: {
+      creatorId: string;
+      status: ReelStatus;
+      hashtags?: string[];
+    }): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(params.creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v4 test reel',
+        hashtags: params.hashtags ?? [],
+        mentions: [],
+        status: params.status,
+      });
+      return doc._id.toString();
+    }
+
+    // FR-070: `hidden` is a fourth non-published status. Before T143/T144
+    // implement the report/admin endpoints that actually *write* this
+    // status, this block proves the schema-level regression: a `hidden`
+    // reel is excluded by the same `visibilityFilter` composition that
+    // already excludes pending/rejected reels — zero query changes needed.
+    it('hides a reel from non-owners everywhere and 404s all engagement, but the owner sees it with its status', async () => {
+      const ownerId = '000000000000000000000010';
+      const ownerToken = await tokenFor(ownerId);
+      const otherToken = await tokenFor('000000000000000000000011');
+      const hiddenId = await createRawReel({
+        creatorId: ownerId,
+        status: ReelStatus.HIDDEN,
+        hashtags: ['v4hiddentag'],
+      });
+
+      // Non-owner: single fetch 404s — the deep-link unknown-reel path.
+      await request(app.getHttpServer())
+        .get(`/api/reels/${hiddenId}`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+
+      // Non-owner: absent from the creator-scoped feed.
+      const creatorFeed = await request(app.getHttpServer())
+        .get(`/api/reels?creatorId=${ownerId}&limit=25`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect(
+        (creatorFeed.body as FeedBody).items.map((i) => i.id),
+      ).not.toContain(hiddenId);
+
+      // Non-owner: absent from the profile grid.
+      const profile = await request(app.getHttpServer())
+        .get(`/api/users/${ownerId}/profile`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect(
+        (
+          profile.body as ProfileBody & {
+            videos: { id: string }[];
+          }
+        ).videos.map((v) => v.id),
+      ).not.toContain(hiddenId);
+
+      // Non-owner: absent from search and its hashtag feed.
+      const search = await request(app.getHttpServer())
+        .get('/api/reels/search?q=v4hiddentag')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect((search.body as FeedBody).items.map((i) => i.id)).not.toContain(
+        hiddenId,
+      );
+      const hashtagFeed = await request(app.getHttpServer())
+        .get('/api/reels?hashtag=v4hiddentag')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect(
+        (hashtagFeed.body as FeedBody).items.map((i) => i.id),
+      ).not.toContain(hiddenId);
+
+      // Non-owner: every engagement action 404s (FR-064 rule extended to `hidden`).
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/like`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/view`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/save`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/share`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/comments`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ text: 'hello' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/reels/${hiddenId}/comments`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+
+      // Owner: single fetch succeeds and carries the "hidden" status
+      // (client renders this as "Under review" — FR-072).
+      const ownerFetch = await request(app.getHttpServer())
+        .get(`/api/reels/${hiddenId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect((ownerFetch.body as ReelBody & { status: string }).status).toBe(
+        'hidden',
+      );
+
+      // Owner: own profile grid includes it, badge-ready via `status`.
+      const ownProfile = await request(app.getHttpServer())
+        .get(`/api/users/${ownerId}/profile`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      const mine = (
+        ownProfile.body as ProfileBody & {
+          videos: { id: string; status: string }[];
+        }
+      ).videos.find((v) => v.id === hiddenId);
+      expect(mine?.status).toBe('hidden');
+    });
+
+    it('leaves seeded (pre-v4) and other-status reels unaffected by the new status value', async () => {
+      const token = await tokenFor('000000000000000000000012');
+      const feed = await request(app.getHttpServer())
+        .get('/api/reels?limit=1')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(
+        (feed.body as FeedBody & { items: { status: string }[] }).items[0]
+          .status,
+      ).toBe('published');
+    });
+  });
+
+  describe('reporting & auto-hide (FR-068–FR-072, v4)', () => {
+    interface ReportBody {
+      reported: boolean;
+      alreadyReported: boolean;
+    }
+    interface HiddenListBody {
+      items: {
+        id: string;
+        reportsCount: number;
+        reports: { reporterId: string; reason: string }[];
+      }[];
+      nextCursor: string | null;
+    }
+    interface AdminModerationBody {
+      id: string;
+      status: string;
+    }
+
+    async function createPublishedReel(creatorId: string): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v4 report-test reel',
+        hashtags: [],
+        mentions: [],
+        status: ReelStatus.PUBLISHED,
+      });
+      return doc._id.toString();
+    }
+
+    const ADMIN_KEY = 'e2e-admin-key';
+    beforeAll(() => {
+      process.env.ADMIN_API_KEY = ADMIN_KEY;
+    });
+    afterAll(() => {
+      delete process.env.ADMIN_API_KEY;
+    });
+
+    it('records a report, no-ops on a duplicate from the same user, and rejects reporting your own reel', async () => {
+      const ownerId = '000000000000000000000020';
+      const ownerToken = await tokenFor(ownerId);
+      const reporterToken = await tokenFor('000000000000000000000021');
+      const reelId = await createPublishedReel(ownerId);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ reason: 'spam' })
+        .expect(400);
+
+      const first = await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'spam' })
+        .expect(201);
+      expect((first.body as ReportBody).alreadyReported).toBe(false);
+
+      const duplicate = await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'spam' })
+        .expect(201);
+      expect((duplicate.body as ReportBody).alreadyReported).toBe(true);
+    });
+
+    it('requires a non-empty customReason for "other" and rejects non-published reels', async () => {
+      const ownerId = '000000000000000000000022';
+      const reporterToken = await tokenFor('000000000000000000000023');
+      const reelId = await createPublishedReel(ownerId);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'other' })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'other', customReason: '   ' })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'other', customReason: 'a real reason' })
+        .expect(201);
+
+      const pendingId = await createRawReelHelper(ownerId, ReelStatus.PENDING_MODERATION);
+      const otherToken = await tokenFor('000000000000000000000024');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${pendingId}/report`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ reason: 'spam' })
+        .expect(404);
+    });
+
+    it('enforces the daily report rate limit and records nothing over it', async () => {
+      process.env.REEL_REPORT_DAILY_LIMIT = '1';
+      const ownerId = '000000000000000000000025';
+      const reporterId = '000000000000000000000026';
+      const reporterToken = await tokenFor(reporterId);
+      const reelA = await createPublishedReel(ownerId);
+      const reelB = await createPublishedReel(ownerId);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelA}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'spam' })
+        .expect(201);
+      // A second report — on a DIFFERENT reel, so it isn't the dedup no-op path — hits the daily cap.
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelB}/report`)
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send({ reason: 'spam' })
+        .expect(429);
+
+      const reelBDoc = await reelModel.findById(reelB).exec();
+      expect(reelBDoc?.reportsCount).toBe(0);
+      delete process.env.REEL_REPORT_DAILY_LIMIT;
+    });
+
+    it('auto-hides at the threshold exactly once, preserves prior engagement, and is invisible everywhere but to the owner', async () => {
+      process.env.REEL_REPORT_AUTOHIDE_THRESHOLD = '3';
+      const ownerId = '000000000000000000000030';
+      const ownerToken = await tokenFor(ownerId);
+      const reelId = await createPublishedReel(ownerId);
+
+      // Pre-hide engagement (a like) — must survive the hide untouched.
+      const liker = await tokenFor('000000000000000000000031');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/like`)
+        .set('Authorization', `Bearer ${liker}`)
+        .expect(201);
+
+      // 3 unique reporters cross the threshold — the last one's response
+      // never reveals that the hide fired (FR-070).
+      for (const uid of [
+        '000000000000000000000032',
+        '000000000000000000000033',
+        '000000000000000000000034',
+      ]) {
+        const t = await tokenFor(uid);
+        await request(app.getHttpServer())
+          .post(`/api/reels/${reelId}/report`)
+          .set('Authorization', `Bearer ${t}`)
+          .send({ reason: 'spam' })
+          .expect(201);
+      }
+
+      const otherToken = await tokenFor('000000000000000000000035');
+      await request(app.getHttpServer())
+        .get(`/api/reels/${reelId}`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      const feed = await request(app.getHttpServer())
+        .get(`/api/reels?creatorId=${ownerId}&limit=25`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(200);
+      expect((feed.body as FeedBody).items.map((i) => i.id)).not.toContain(
+        reelId,
+      );
+
+      const ownerFetch = await request(app.getHttpServer())
+        .get(`/api/reels/${reelId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect((ownerFetch.body as ReelBody & { status: string }).status).toBe(
+        'hidden',
+      );
+
+      // Engagement recorded before the hide is untouched.
+      const reelDoc = await reelModel.findById(reelId).exec();
+      expect(reelDoc?.likesCount).toBe(1);
+
+      delete process.env.REEL_REPORT_AUTOHIDE_THRESHOLD;
+    });
+
+    it('lists the hidden reel for an admin with its report reasons, and rejects a bad/missing key', async () => {
+      process.env.REEL_REPORT_AUTOHIDE_THRESHOLD = '1';
+      const ownerId = '000000000000000000000040';
+      const reelId = await createPublishedReel(ownerId);
+      const reporter = await tokenFor('000000000000000000000041');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporter}`)
+        .send({ reason: 'hate_speech' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .get('/api/reels/moderation/hidden')
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/reels/moderation/hidden')
+        .set('x-admin-key', 'wrong-key')
+        .expect(401);
+
+      const list = await request(app.getHttpServer())
+        .get('/api/reels/moderation/hidden')
+        .set('x-admin-key', ADMIN_KEY)
+        .expect(200);
+      const entry = (list.body as HiddenListBody).items.find(
+        (i) => i.id === reelId,
+      );
+      expect(entry).toBeTruthy();
+      expect(entry?.reportsCount).toBe(1);
+      expect(entry?.reports[0].reason).toBe('hate_speech');
+
+      await request(app.getHttpServer())
+        .patch(`/api/reels/${reelId}/moderation`)
+        .send({ action: 'restore' })
+        .expect(401);
+
+      delete process.env.REEL_REPORT_AUTOHIDE_THRESHOLD;
+    });
+
+    it('restores a hidden reel with prior counts intact and makes it permanently immune to further auto-hides', async () => {
+      process.env.REEL_REPORT_AUTOHIDE_THRESHOLD = '1';
+      const ownerId = '000000000000000000000050';
+      const ownerToken = await tokenFor(ownerId);
+      const reelId = await createPublishedReel(ownerId);
+
+      const liker = await tokenFor('000000000000000000000051');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/like`)
+        .set('Authorization', `Bearer ${liker}`)
+        .expect(201);
+
+      const reporter = await tokenFor('000000000000000000000052');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporter}`)
+        .send({ reason: 'spam' })
+        .expect(201);
+      const hiddenCheck = await request(app.getHttpServer())
+        .get(`/api/reels/${reelId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect((hiddenCheck.body as ReelBody & { status: string }).status).toBe(
+        'hidden',
+      );
+
+      const restore = await request(app.getHttpServer())
+        .patch(`/api/reels/${reelId}/moderation`)
+        .set('x-admin-key', ADMIN_KEY)
+        .send({ action: 'restore' })
+        .expect(200);
+      expect((restore.body as AdminModerationBody).status).toBe('published');
+
+      // Restoring an already-published reel 409s (FR-071 precondition).
+      await request(app.getHttpServer())
+        .patch(`/api/reels/${reelId}/moderation`)
+        .set('x-admin-key', ADMIN_KEY)
+        .send({ action: 'restore' })
+        .expect(409);
+
+      // Prior engagement survived the hidden period untouched.
+      const reelDoc = await reelModel.findById(reelId).exec();
+      expect(reelDoc?.likesCount).toBe(1);
+
+      // FR-070 "one auto-hide per reel ever": fresh reports (still above
+      // threshold=1) never re-hide an admin-restored reel.
+      const newReporter = await tokenFor('000000000000000000000053');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${newReporter}`)
+        .send({ reason: 'spam' })
+        .expect(201);
+      const stillPublished = await request(app.getHttpServer())
+        .get(`/api/reels/${reelId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(
+        (stillPublished.body as ReelBody & { status: string }).status,
+      ).toBe('published');
+
+      delete process.env.REEL_REPORT_AUTOHIDE_THRESHOLD;
+    });
+
+    it('rejects a hidden reel via the admin endpoint, adopting the existing rejected-reel presentation', async () => {
+      process.env.REEL_REPORT_AUTOHIDE_THRESHOLD = '1';
+      const ownerId = '000000000000000000000060';
+      const ownerToken = await tokenFor(ownerId);
+      const reelId = await createPublishedReel(ownerId);
+      const reporter = await tokenFor('000000000000000000000061');
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/report`)
+        .set('Authorization', `Bearer ${reporter}`)
+        .send({ reason: 'violence' })
+        .expect(201);
+
+      const reject = await request(app.getHttpServer())
+        .patch(`/api/reels/${reelId}/moderation`)
+        .set('x-admin-key', ADMIN_KEY)
+        .send({ action: 'reject' })
+        .expect(200);
+      expect((reject.body as AdminModerationBody).status).toBe('rejected');
+
+      const ownerFetch = await request(app.getHttpServer())
+        .get(`/api/reels/${reelId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect((ownerFetch.body as ReelBody & { status: string }).status).toBe(
+        'rejected',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/api/reels/000000000000000000000fff/moderation')
+        .set('x-admin-key', ADMIN_KEY)
+        .send({ action: 'restore' })
+        .expect(404);
+
+      delete process.env.REEL_REPORT_AUTOHIDE_THRESHOLD;
+    });
+
+    // Shared with the "hidden visibility" describe block above — duplicated
+    // locally (same shape) so this block has no cross-describe dependency.
+    async function createRawReelHelper(
+      creatorId: string,
+      status: ReelStatus,
+    ): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v4 test reel',
+        hashtags: [],
+        mentions: [],
+        status,
+      });
+      return doc._id.toString();
+    }
+  });
+
+  describe('repost & feed tabs (FR-073–FR-078, v4)', () => {
+    interface RepostBody {
+      reposted: boolean;
+    }
+
+    async function createPublishedReel(creatorId: string): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v4 repost-test reel',
+        hashtags: [],
+        mentions: [],
+        status: ReelStatus.PUBLISHED,
+      });
+      return doc._id.toString();
+    }
+
+    it('reposts, no-ops on a duplicate, rejects self-repost, and un-reposts idempotently', async () => {
+      const ownerId = '000000000000000000000070';
+      const ownerToken = await tokenFor(ownerId);
+      const reposterToken = await tokenFor('000000000000000000000071');
+      const reelId = await createPublishedReel(ownerId);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(400);
+
+      const first = await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(201);
+      expect((first.body as RepostBody).reposted).toBe(true);
+
+      const duplicate = await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(201);
+      expect((duplicate.body as RepostBody).reposted).toBe(true);
+
+      const unreposted = await request(app.getHttpServer())
+        .delete(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(200);
+      expect((unreposted.body as RepostBody).reposted).toBe(false);
+
+      // Un-repost of nothing is a quiet no-op.
+      const unrepostedAgain = await request(app.getHttpServer())
+        .delete(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(200);
+      expect((unrepostedAgain.body as RepostBody).reposted).toBe(false);
+    });
+
+    it('404s reposting a pending or hidden reel', async () => {
+      const ownerId = '000000000000000000000072';
+      const reposterToken = await tokenFor('000000000000000000000073');
+      const pendingId = await createRawReelHelper(ownerId, ReelStatus.PENDING_MODERATION);
+      const hiddenId = await createRawReelHelper(ownerId, ReelStatus.HIDDEN);
+
+      await request(app.getHttpServer())
+        .post(`/api/reels/${pendingId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${hiddenId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(404);
+    });
+
+    it('injects a followee repost into For You with attribution, dedups, excludes it from Following, and never notifies the creator', async () => {
+      const viewerId = '000000000000000000000080';
+      const followeeId = '000000000000000000000081';
+      const creatorId = '000000000000000000000082';
+      const viewerToken = await tokenFor(viewerId);
+      const followeeToken = await tokenFor(followeeId);
+      await tokenFor(creatorId);
+      await userModel.findByIdAndUpdate(followeeId, { username: 'friendly_follower' });
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(followeeId),
+      });
+
+      const reelId = await createPublishedReel(creatorId);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${followeeToken}`)
+        .expect(201);
+
+      const forYou = await request(app.getHttpServer())
+        .get('/api/reels?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const occurrences = (forYou.body as FeedBody).items.filter((i) => i.id === reelId);
+      expect(occurrences).toHaveLength(1);
+      expect(
+        (occurrences[0] as unknown as { repostedBy: { username: string } | null })
+          .repostedBy?.username,
+      ).toBe('friendly_follower');
+
+      const following = await request(app.getHttpServer())
+        .get('/api/reels/following?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const followingItems = following.body as unknown as {
+        items: { id: string; repostedBy: unknown }[];
+      };
+      expect(followingItems.items.every((i) => i.repostedBy === null)).toBe(true);
+      expect(followingItems.items.map((i) => i.id)).not.toContain(reelId);
+
+      // Reposting never notifies the creator (FR-073).
+      const events = await notificationEventModel.find({ reelId: new mongoose.Types.ObjectId(reelId) }).exec();
+      expect(events).toHaveLength(0);
+
+      // Un-repost -> injection gone on the next fetch.
+      await request(app.getHttpServer())
+        .delete(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${followeeToken}`)
+        .expect(200);
+      const afterUnrepost = await request(app.getHttpServer())
+        .get('/api/reels?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const stillThere = (afterUnrepost.body as FeedBody).items.find((i) => i.id === reelId);
+      expect(
+        (stillThere as unknown as { repostedBy: unknown } | undefined)?.repostedBy ?? null,
+      ).toBeNull();
+    });
+
+    it('suppresses the injection when the viewer blocks the reposter, and marks own reposts "you"', async () => {
+      const viewerId = '000000000000000000000090';
+      const reposterId = '000000000000000000000091';
+      const creatorId = '000000000000000000000092';
+      const viewerToken = await tokenFor(viewerId);
+      const reposterToken = await tokenFor(reposterId);
+      await tokenFor(creatorId);
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(reposterId),
+      });
+
+      const reelId = await createPublishedReel(creatorId);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelId}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(201);
+
+      // Own repost shows self-attribution.
+      const ownReelId = await createPublishedReel(creatorId);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${ownReelId}/repost`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(201);
+      const feedBeforeBlock = await request(app.getHttpServer())
+        .get('/api/reels?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const ownItem = (feedBeforeBlock.body as FeedBody).items.find((i) => i.id === ownReelId);
+      expect(
+        (ownItem as unknown as { repostedBy: { id: string } | null })?.repostedBy?.id,
+      ).toBe(viewerId);
+
+      // Block the reposter — the reposter-edge suppression applies (FR-078)
+      // independent of the (unblocked) creator edge.
+      await request(app.getHttpServer())
+        .post(`/api/users/${reposterId}/block`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(201);
+      const feedAfterBlock = await request(app.getHttpServer())
+        .get('/api/reels?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const suppressed = (feedAfterBlock.body as FeedBody).items.find((i) => i.id === reelId);
+      expect(
+        (suppressed as unknown as { repostedBy: unknown } | undefined)?.repostedBy ?? null,
+      ).toBeNull();
+    });
+
+    async function createRawReelHelper(
+      creatorId: string,
+      status: ReelStatus,
+    ): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v4 test reel',
+        hashtags: [],
+        mentions: [],
+        status,
+      });
+      return doc._id.toString();
+    }
   });
 
   describe('upload & moderation (FR-060–FR-067, v3)', () => {
