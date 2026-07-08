@@ -144,6 +144,19 @@ export class ReelsService {
     });
   }
 
+  /** v6: everyone who reposted a reel — the reposters bottom sheet. */
+  async getReposters(viewerId: string, reelId: string, query: FeedQueryDto) {
+    const excludeUserIds = await this.getBlockSet(viewerId);
+    const result = await this.repository.listReposters(reelId, {
+      viewerId,
+      cursor: query.cursor,
+      limit: query.limit ?? 20,
+      excludeUserIds,
+    });
+    if (result === null) throw new NotFoundException('Reel not found');
+    return result;
+  }
+
   async getReel(id: string, viewerId: string) {
     const excludeCreatorIds = await this.getBlockSet(viewerId);
     const reel = await this.repository.getReel(id, viewerId, excludeCreatorIds);

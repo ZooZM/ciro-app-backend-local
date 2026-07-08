@@ -37,6 +37,21 @@ import {
   UserSearchResultDto,
 } from './reels.repository';
 
+/** v6: one viewer-relevant reposter (followed ∪ self) for the badge stack. */
+interface RepostReposter {
+  id: string;
+  username: string;
+  name: string;
+  avatarUrl: string;
+}
+
+/** v6: per-video repost attribution — primary label + avatar stack + count. */
+interface RepostAttribution {
+  primary: RepostReposter;
+  top: RepostReposter[];
+  count: number;
+}
+
 /**
  * Mongoose-backed `ReelsRepository` (v2 — replaces `ReelsMockStore`).
  *
@@ -176,6 +191,11 @@ export class ReelsDbRepository implements ReelsRepository {
         // on its repost-injected items only; every other path (including
         // the Following feed) always serves organic items.
         repostedBy: null,
+        // v6: viewer-relevant reposters (followed ∪ self) — count + a few
+        // avatars for the badge stack; overwritten on the For You + profile
+        // reposts-list paths, 0/[] everywhere else.
+        repostersCount: 0,
+        topReposters: [],
         viewerReposted: repostedSet.has(r._id.toString()),
       };
     });
@@ -234,9 +254,7 @@ export class ReelsDbRepository implements ReelsRepository {
   private async getRepostAttributions(
     viewerId: string,
     excludeCreatorIds: string[],
-  ): Promise<
-    Map<string, { id: string; username: string; name: string; avatarUrl: string }>
-  > {
+  ): Promise<Map<string, RepostAttribution>> {
     const viewerObjectId = this.toObjectId(viewerId);
     if (!viewerObjectId) return new Map();
 
@@ -262,17 +280,23 @@ export class ReelsDbRepository implements ReelsRepository {
       .exec();
     if (reposts.length === 0) return new Map();
 
-    // Most-recent-first order already sorted above; keep only the first
-    // (= most recent) repost seen per videoId.
-    const latestByVideo = new Map<string, (typeof reposts)[number]>();
+    // Most-recent-first order already sorted above; collect ALL relevant
+    // reposters per videoId (v6 — the badge shows a count + a few avatars),
+    // preserving recency order.
+    const repostsByVideo = new Map<string, (typeof reposts)[number][]>();
     for (const r of reposts) {
       const key = r.videoId.toString();
-      if (!latestByVideo.has(key)) latestByVideo.set(key, r);
+      const list = repostsByVideo.get(key);
+      if (list) {
+        list.push(r);
+      } else {
+        repostsByVideo.set(key, [r]);
+      }
     }
 
-    const videoIds = [...latestByVideo.keys()].map((id) => this.toObjectId(id));
+    const videoIds = [...repostsByVideo.keys()].map((id) => this.toObjectId(id));
     const reposterIdsNeeded = [
-      ...new Set([...latestByVideo.values()].map((r) => r.reposterId.toString())),
+      ...new Set(reposts.map((r) => r.reposterId.toString())),
     ].map((id) => this.toObjectId(id));
 
     const [reels, reposterUsers] = await Promise.all([
@@ -295,21 +319,27 @@ export class ReelsDbRepository implements ReelsRepository {
     const excludeReposterSet = new Set(excludeCreatorIds);
     const reposterById = new Map(reposterUsers.map((u) => [u._id.toString(), u]));
 
-    const attributions = new Map<
-      string,
-      { id: string; username: string; name: string; avatarUrl: string }
-    >();
-    for (const [videoId, repost] of latestByVideo) {
+    const attributions = new Map<string, RepostAttribution>();
+    for (const [videoId, list] of repostsByVideo) {
       if (!visibleVideoIds.has(videoId)) continue; // source no longer published/blocked
-      const reposterId = repost.reposterId.toString();
-      if (excludeReposterSet.has(reposterId)) continue; // FR-078 reposter-edge block
-      const reposter = reposterById.get(reposterId);
-      if (!reposter) continue;
+      const relevant: RepostReposter[] = [];
+      for (const repost of list) {
+        const reposterId = repost.reposterId.toString();
+        if (excludeReposterSet.has(reposterId)) continue; // FR-078 reposter-edge block
+        const reposter = reposterById.get(reposterId);
+        if (!reposter) continue;
+        relevant.push({
+          id: reposterId,
+          username: reposter.username ?? '',
+          name: reposter.name,
+          avatarUrl: reposter.avatarUrl ?? '',
+        });
+      }
+      if (relevant.length === 0) continue;
       attributions.set(videoId, {
-        id: reposterId,
-        username: reposter.username ?? '',
-        name: reposter.name,
-        avatarUrl: reposter.avatarUrl ?? '',
+        primary: relevant[0],
+        top: relevant.slice(0, 3),
+        count: relevant.length,
       });
     }
     return attributions;
@@ -437,12 +467,16 @@ export class ReelsDbRepository implements ReelsRepository {
     }
 
     const items = await this.hydrate(docs, params.viewerId);
-    // Attach repostedBy to whichever page items happen to carry an
-    // attribution (the prepended ones on page 0, or any natural-rotation
-    // item on later pages/loop cycles that matches).
+    // Attach repost attribution to whichever page items carry one (the
+    // prepended ones on page 0, or any natural-rotation item on later
+    // pages/loop cycles that matches). v6: also the count + avatar stack.
     for (const item of items) {
       const attribution = attributions.get(item.id);
-      if (attribution) item.repostedBy = attribution;
+      if (attribution) {
+        item.repostedBy = attribution.primary;
+        item.repostersCount = attribution.count;
+        item.topReposters = attribution.top;
+      }
     }
 
     return {
@@ -942,24 +976,33 @@ export class ReelsDbRepository implements ReelsRepository {
 
     const items = await this.hydrate(ordered, viewerId);
 
-    // v6: every item in this list was reposted BY the target user, so attribute
-    // it — the client renders "[name] reposted" (or "You reposted" when the
-    // target is the viewer) exactly like a For You repost-injected item.
-    const reposter = await this.userModel
+    // v6: every item here was reposted BY the target user (always the primary
+    // attribution / "[name] reposted"), but the badge also counts the OTHER
+    // viewer-relevant reposters (people the viewer follows, ∪ self) of the
+    // same video — so it matches the For You "N reposted" stack everywhere.
+    const ownerUser = await this.userModel
       .findById(reposterId)
       .select('username name avatarUrl')
       .lean()
       .exec();
-    if (reposter) {
-      const attribution = {
-        id: targetUserId,
-        username: reposter.username ?? '',
-        name: reposter.name,
-        avatarUrl: reposter.avatarUrl ?? '',
-      };
-      for (const item of items) {
-        item.repostedBy = attribution;
-      }
+    const ownerReposter: RepostReposter = {
+      id: targetUserId,
+      username: ownerUser?.username ?? '',
+      name: ownerUser?.name ?? '',
+      avatarUrl: ownerUser?.avatarUrl ?? '',
+    };
+    const relevant = await this.getRelevantRepostersForVideos(
+      viewerId,
+      items.map((i) => i.id),
+      params.excludeCreatorIds,
+      targetUserId,
+    );
+    for (const item of items) {
+      const others = (relevant.get(item.id) ?? []).filter((r) => r.id !== targetUserId);
+      const ordered2 = [ownerReposter, ...others];
+      item.repostedBy = ownerReposter;
+      item.repostersCount = ordered2.length;
+      item.topReposters = ordered2.slice(0, 3);
     }
 
     const nextOffset = offset + params.limit;
@@ -967,6 +1010,80 @@ export class ReelsDbRepository implements ReelsRepository {
       items,
       nextCursor: nextOffset < total ? String(nextOffset) : null,
     };
+  }
+
+  /**
+   * v6: for a specific set of [videoIds], the reposters relevant to the viewer
+   * — people the viewer follows, ∪ the viewer, ∪ [alwaysIncludeUserId] — each
+   * video's list most-recent-first, reposter-edge block-filtered. Powers the
+   * multi-reposter badge stack on scoped surfaces (the profile Reposts list).
+   */
+  private async getRelevantRepostersForVideos(
+    viewerId: string,
+    videoIds: string[],
+    excludeCreatorIds: string[],
+    alwaysIncludeUserId?: string,
+  ): Promise<Map<string, RepostReposter[]>> {
+    const viewerObjectId = this.toObjectId(viewerId);
+    const videoObjectIds = videoIds
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+    if (!viewerObjectId || videoObjectIds.length === 0) return new Map();
+
+    const follows = await this.followModel
+      .find({ followerId: viewerObjectId })
+      .select('followeeId')
+      .lean()
+      .exec();
+    const relevantIds = [
+      ...new Set([
+        ...follows.map((f) => f.followeeId.toString()),
+        viewerId,
+        ...(alwaysIncludeUserId ? [alwaysIncludeUserId] : []),
+      ]),
+    ]
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+
+    const reposts = await this.repostModel
+      .find({ videoId: { $in: videoObjectIds }, reposterId: { $in: relevantIds } })
+      .sort({ createdAt: -1, _id: -1 })
+      .lean()
+      .exec();
+    if (reposts.length === 0) return new Map();
+
+    const neededUserIds = [
+      ...new Set(reposts.map((r) => r.reposterId.toString())),
+    ].map((id) => this.toObjectId(id));
+    const users = await this.userModel
+      .find({ _id: { $in: neededUserIds } })
+      .select('username name avatarUrl')
+      .lean()
+      .exec();
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+    const excludeSet = new Set(excludeCreatorIds);
+
+    const byVideo = new Map<string, RepostReposter[]>();
+    for (const r of reposts) {
+      const reposterId = r.reposterId.toString();
+      if (excludeSet.has(reposterId)) continue;
+      const u = userById.get(reposterId);
+      if (!u) continue;
+      const videoId = r.videoId.toString();
+      const list = byVideo.get(videoId);
+      const entry: RepostReposter = {
+        id: reposterId,
+        username: u.username ?? '',
+        name: u.name,
+        avatarUrl: u.avatarUrl ?? '',
+      };
+      if (list) {
+        list.push(entry);
+      } else {
+        byVideo.set(videoId, [entry]);
+      }
+    }
+    return byVideo;
   }
 
   async searchReels(params: {
@@ -1097,6 +1214,71 @@ export class ReelsDbRepository implements ReelsRepository {
     const userById = new Map(users.map((u) => [u._id.toString(), u]));
 
     const items: FollowedUserDto[] = orderedFolloweeIds
+      .map((id) => userById.get(id))
+      .filter((u): u is NonNullable<typeof u> => u !== undefined)
+      .map((u) => ({
+        id: u._id.toString(),
+        username: u.username ?? '',
+        name: u.name,
+        avatarUrl: u.avatarUrl ?? '',
+      }));
+
+    const nextOffset = offset + params.limit;
+    return {
+      items,
+      nextCursor: nextOffset < total ? String(nextOffset) : null,
+    };
+  }
+
+  /**
+   * v6: everyone who reposted [reelId], most-recent-first — the reposters
+   * bottom sheet. The reel must be visible to the viewer (published, not
+   * blocked); reposters the viewer blocked are filtered out.
+   */
+  async listReposters(
+    reelId: string,
+    params: { viewerId: string; cursor?: string; limit: number; excludeUserIds: string[] },
+  ): Promise<{ items: FollowedUserDto[]; nextCursor: string | null } | null> {
+    const videoId = this.toObjectId(reelId);
+    if (!videoId) return null;
+
+    // Gate on the reel being visible to the viewer (published / owner).
+    const reel = await this.reelModel
+      .findOne({ _id: videoId, ...this.visibilityFilter(params.viewerId) })
+      .select('_id')
+      .lean()
+      .exec();
+    if (!reel) return null;
+
+    const excludeIds = params.excludeUserIds
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+    const filter: Record<string, unknown> = {
+      videoId,
+      ...(excludeIds.length > 0 ? { reposterId: { $nin: excludeIds } } : {}),
+    };
+
+    const offset = this.parseCursor(params.cursor);
+    const total = await this.repostModel.countDocuments(filter).exec();
+    if (total === 0) return { items: [], nextCursor: null };
+
+    const reposts = await this.repostModel
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(params.limit)
+      .lean()
+      .exec();
+    const orderedReposterIds = reposts.map((r) => r.reposterId.toString());
+
+    const users = await this.userModel
+      .find({ _id: { $in: reposts.map((r) => r.reposterId) } })
+      .select('username name avatarUrl')
+      .lean()
+      .exec();
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const items: FollowedUserDto[] = orderedReposterIds
       .map((id) => userById.get(id))
       .filter((u): u is NonNullable<typeof u> => u !== undefined)
       .map((u) => ({

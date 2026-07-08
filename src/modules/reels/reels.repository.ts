@@ -63,8 +63,15 @@ export interface ReelDto {
   sharesCount: number;
   viewerLiked: boolean;
   viewerSaved: boolean;
-  // v4 (FR-076): non-null only on For You repost-injected items.
+  // v4 (FR-076): non-null only on For You repost-injected items (and v6
+  // profile Reposts-list items). The primary/most-recent relevant reposter.
   repostedBy: { id: string; username: string; name: string; avatarUrl: string } | null;
+  // v6: viewer-relevant reposters (people the viewer follows, ∪ the viewer),
+  // driving the multi-reposter badge — `repostersCount` is the total of that
+  // relevant set, `topReposters` are up to 3 of them (most-recent-first) for
+  // the stacked-avatar display. Both 0/[] on surfaces without repost context.
+  repostersCount: number;
+  topReposters: { id: string; username: string; name: string; avatarUrl: string }[];
   // v4 (FR-073): drives the action-column Repost button's active state —
   // true whenever the CALLER (not just any followee) has reposted this reel.
   viewerReposted: boolean;
@@ -286,6 +293,16 @@ export interface ReelsRepository {
     limit: number;
     excludeUserIds: string[];
   }): Promise<{ items: FollowedUserDto[]; nextCursor: string | null }>;
+
+  /**
+   * v6: everyone who reposted [reelId], most-recent-first — the reposters
+   * bottom sheet. Block-filtered for the viewer; `null` when the reel is
+   * unknown/not visible.
+   */
+  listReposters(
+    reelId: string,
+    params: { viewerId: string; cursor?: string; limit: number; excludeUserIds: string[] },
+  ): Promise<{ items: FollowedUserDto[]; nextCursor: string | null } | null>;
 
   /**
    * v3 (FR-067): owner-only cascade delete — relation docs, reel-scoped

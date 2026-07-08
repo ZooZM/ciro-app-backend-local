@@ -248,6 +248,16 @@ export class ReelsController {
     return this.reelsService.unrepostReel(id, req.user.userId);
   }
 
+  // v6: everyone who reposted this reel — the reposters bottom sheet.
+  @Get(':id/reposters')
+  getReposters(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query() query: FeedQueryDto,
+  ) {
+    return this.reelsService.getReposters(req.user.userId, id, query);
+  }
+
   /**
    * FR-060a: server-side duration enforcement (never trust the client alone).
    *

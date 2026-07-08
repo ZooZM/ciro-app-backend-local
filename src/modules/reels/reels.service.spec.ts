@@ -63,6 +63,7 @@ describe('ReelsService', () => {
       listFollowingFeed: jest.fn(),
       getFollowingUsers: jest.fn(),
       listReposted: jest.fn(),
+      listReposters: jest.fn(),
     };
 
     userModel = {
@@ -469,6 +470,25 @@ describe('ReelsService', () => {
         viewerId,
         viewerId,
         expect.anything(),
+      );
+    });
+
+    // v6: reposters bottom sheet.
+    it('getReposters forwards the reelId + block set and returns the repository page', async () => {
+      const page = { items: [], nextCursor: null };
+      repository.listReposters.mockResolvedValue(page);
+      const result = await service.getReposters(viewerId, reelId, {});
+      expect(repository.listReposters).toHaveBeenCalledWith(
+        reelId,
+        expect.objectContaining({ viewerId, limit: 20 }),
+      );
+      expect(result).toBe(page);
+    });
+
+    it('getReposters throws NotFound when the reel is unknown/not visible', async () => {
+      repository.listReposters.mockResolvedValue(null);
+      await expect(service.getReposters(viewerId, reelId, {})).rejects.toBeInstanceOf(
+        NotFoundException,
       );
     });
   });

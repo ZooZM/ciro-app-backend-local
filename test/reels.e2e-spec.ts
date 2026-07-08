@@ -1766,6 +1766,86 @@ describe('Reels module (e2e)', () => {
     });
   });
 
+  describe('reposters list + multi-reposter badge (v6)', () => {
+    async function createPublishedReel(creatorId: string): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v6 reposters-badge reel',
+        hashtags: [],
+        mentions: [],
+        status: ReelStatus.PUBLISHED,
+      });
+      return doc._id.toString();
+    }
+
+    it('GET /:id/reposters requires auth and 404s an unknown reel', async () => {
+      const token = await tokenFor('0000000000000000000000e0');
+      await request(app.getHttpServer())
+        .get('/api/reels/000000000000000000009999/reposters')
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/reels/000000000000000000009999/reposters')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('lists every reposter newest-first, and the For You badge shows count + stack of followed reposters', async () => {
+      const viewerId = '0000000000000000000000e1';
+      const followeeAId = '0000000000000000000000e2';
+      const followeeBId = '0000000000000000000000e3';
+      const strangerId = '0000000000000000000000e4';
+      const creatorId = '0000000000000000000000e5';
+      const viewerToken = await tokenFor(viewerId);
+      const aToken = await tokenFor(followeeAId);
+      const bToken = await tokenFor(followeeBId);
+      const strangerToken = await tokenFor(strangerId);
+      await tokenFor(creatorId);
+      await userModel.findByIdAndUpdate(followeeAId, { username: 'a_user', name: 'A User' });
+      await userModel.findByIdAndUpdate(followeeBId, { username: 'b_user', name: 'B User' });
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(followeeAId),
+      });
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(followeeBId),
+      });
+
+      const reel = await createPublishedReel(creatorId);
+      for (const t of [aToken, bToken, strangerToken]) {
+        await request(app.getHttpServer())
+          .post(`/api/reels/${reel}/repost`)
+          .set('Authorization', `Bearer ${t}`)
+          .expect(201);
+      }
+
+      // Reposters sheet: ALL three, newest-first (stranger last-reposted → first).
+      const sheet = await request(app.getHttpServer())
+        .get(`/api/reels/${reel}/reposters`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const ids = (sheet.body as { items: { id: string }[] }).items.map((i) => i.id);
+      expect(ids).toHaveLength(3);
+      expect(ids[0]).toBe(strangerId);
+
+      // For You badge: count is the TWO followed reposters (∪ self), not the stranger.
+      const forYou = await request(app.getHttpServer())
+        .get('/api/reels?limit=25')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const item = (forYou.body as FeedBody).items.find((i) => i.id === reel) as unknown as {
+        repostersCount: number;
+        topReposters: { id: string }[];
+      };
+      expect(item.repostersCount).toBe(2);
+      expect(item.topReposters.map((r) => r.id).sort()).toEqual(
+        [followeeAId, followeeBId].sort(),
+      );
+    });
+  });
+
   describe('public store-redirect page (FR-039a, no auth)', () => {
     it('serves HTML without a token', async () => {
       const res = await request(app.getHttpServer())
