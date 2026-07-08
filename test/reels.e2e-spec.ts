@@ -1690,6 +1690,7 @@ describe('Reels module (e2e)', () => {
 
     interface FeedItem {
       id: string;
+      repostedBy: { id: string; name: string } | null;
     }
     interface RepostsBody {
       items: FeedItem[];
@@ -1718,12 +1719,15 @@ describe('Reels module (e2e)', () => {
         .set('Authorization', `Bearer ${reposterToken}`)
         .expect(201);
 
-      // A different viewer sees the reposter's public reposts, newest-first.
+      // A different viewer sees the reposter's public reposts, newest-first,
+      // each attributed to the reposter (drives the "[name] reposted" badge).
       const res = await request(app.getHttpServer())
         .get(`/api/reels/reposted?userId=${reposterId}`)
         .set('Authorization', `Bearer ${viewerToken}`)
         .expect(200);
-      expect((res.body as RepostsBody).items.map((i) => i.id)).toEqual([reelB, reelA]);
+      const items = (res.body as RepostsBody).items;
+      expect(items.map((i) => i.id)).toEqual([reelB, reelA]);
+      expect(items.every((i) => i.repostedBy?.id === reposterId)).toBe(true);
 
       // A reposted reel that leaves the published state drops out of the list.
       await reelModel.updateOne(

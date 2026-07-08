@@ -940,9 +940,31 @@ export class ReelsDbRepository implements ReelsRepository {
       .map((id) => reelById.get(id.toString()))
       .filter((r): r is ReelDocument => r !== undefined);
 
+    const items = await this.hydrate(ordered, viewerId);
+
+    // v6: every item in this list was reposted BY the target user, so attribute
+    // it — the client renders "[name] reposted" (or "You reposted" when the
+    // target is the viewer) exactly like a For You repost-injected item.
+    const reposter = await this.userModel
+      .findById(reposterId)
+      .select('username name avatarUrl')
+      .lean()
+      .exec();
+    if (reposter) {
+      const attribution = {
+        id: targetUserId,
+        username: reposter.username ?? '',
+        name: reposter.name,
+        avatarUrl: reposter.avatarUrl ?? '',
+      };
+      for (const item of items) {
+        item.repostedBy = attribution;
+      }
+    }
+
     const nextOffset = offset + params.limit;
     return {
-      items: await this.hydrate(ordered, viewerId),
+      items,
       nextCursor: nextOffset < total ? String(nextOffset) : null,
     };
   }
