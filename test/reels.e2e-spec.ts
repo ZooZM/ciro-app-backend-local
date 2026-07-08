@@ -1590,6 +1590,178 @@ describe('Reels module (e2e)', () => {
     });
   });
 
+  describe('followed-users list (FR-084, v5)', () => {
+    interface FollowingUsersBody {
+      items: { id: string; username: string; name: string; avatarUrl: string }[];
+      nextCursor: string | null;
+    }
+
+    it('requires auth', async () => {
+      await request(app.getHttpServer())
+        .get('/api/reels/me/following')
+        .expect(401);
+    });
+
+    it('returns followees most-recently-followed first, paginates, and excludes blocked followees', async () => {
+      const viewerId = '0000000000000000000000a0';
+      const followeeAId = '0000000000000000000000a1';
+      const followeeBId = '0000000000000000000000a2';
+      const blockedFolloweeId = '0000000000000000000000a3';
+      const viewerToken = await tokenFor(viewerId);
+      await tokenFor(followeeAId);
+      await tokenFor(followeeBId);
+      await tokenFor(blockedFolloweeId);
+      await userModel.findByIdAndUpdate(followeeAId, {
+        username: 'alice',
+        name: 'Alice A',
+      });
+      await userModel.findByIdAndUpdate(followeeBId, {
+        username: 'bob',
+        name: 'Bob B',
+      });
+      await userModel.findByIdAndUpdate(blockedFolloweeId, {
+        username: 'blocked_user',
+        name: 'Blocked User',
+      });
+
+      // Followed in order A, then blocked, then B — B is most recent.
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(followeeAId),
+      });
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(blockedFolloweeId),
+      });
+      await followModel.create({
+        followerId: new mongoose.Types.ObjectId(viewerId),
+        followeeId: new mongoose.Types.ObjectId(followeeBId),
+      });
+      await request(app.getHttpServer())
+        .post(`/api/users/${blockedFolloweeId}/block`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(201);
+
+      const page1 = await request(app.getHttpServer())
+        .get('/api/reels/me/following?limit=1')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const body1 = page1.body as FollowingUsersBody;
+      expect(body1.items).toHaveLength(1);
+      expect(body1.items[0].username).toBe('bob');
+      expect(body1.nextCursor).not.toBeNull();
+
+      const page2 = await request(app.getHttpServer())
+        .get(`/api/reels/me/following?limit=1&cursor=${body1.nextCursor}`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      const body2 = page2.body as FollowingUsersBody;
+      expect(body2.items).toHaveLength(1);
+      expect(body2.items[0].username).toBe('alice');
+      // Blocked followee never appears across either page.
+      expect(body1.items.map((i) => i.username)).not.toContain('blocked_user');
+      expect(body2.items.map((i) => i.username)).not.toContain('blocked_user');
+    });
+
+    it('returns an empty page when the viewer follows no one', async () => {
+      const viewerToken = await tokenFor('0000000000000000000000b0');
+      const res = await request(app.getHttpServer())
+        .get('/api/reels/me/following')
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      expect((res.body as FollowingUsersBody).items).toEqual([]);
+      expect((res.body as FollowingUsersBody).nextCursor).toBeNull();
+    });
+  });
+
+  describe('public reposts list (v6)', () => {
+    async function createPublishedReel(creatorId: string): Promise<string> {
+      const doc = await reelModel.create({
+        creatorId: new mongoose.Types.ObjectId(creatorId),
+        videoUrl: '/uploads/reels/videos/test.mp4',
+        thumbnailUrl: '/uploads/reels/thumbs/test.jpg',
+        description: 'a v6 reposts-list reel',
+        hashtags: [],
+        mentions: [],
+        status: ReelStatus.PUBLISHED,
+      });
+      return doc._id.toString();
+    }
+
+    interface FeedItem {
+      id: string;
+    }
+    interface RepostsBody {
+      items: FeedItem[];
+      nextCursor: string | null;
+    }
+
+    it('requires auth', async () => {
+      await request(app.getHttpServer()).get('/api/reels/reposted').expect(401);
+    });
+
+    it("is public — returns a target user's reposts (newest-first) to any viewer, dropping ones that left published", async () => {
+      const reposterId = '0000000000000000000000c0';
+      const creatorId = '0000000000000000000000c1';
+      const viewerToken = await tokenFor('0000000000000000000000c2');
+      const reposterToken = await tokenFor(reposterId);
+      await tokenFor(creatorId);
+
+      const reelA = await createPublishedReel(creatorId);
+      const reelB = await createPublishedReel(creatorId);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelA}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reelB}/repost`)
+        .set('Authorization', `Bearer ${reposterToken}`)
+        .expect(201);
+
+      // A different viewer sees the reposter's public reposts, newest-first.
+      const res = await request(app.getHttpServer())
+        .get(`/api/reels/reposted?userId=${reposterId}`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      expect((res.body as RepostsBody).items.map((i) => i.id)).toEqual([reelB, reelA]);
+
+      // A reposted reel that leaves the published state drops out of the list.
+      await reelModel.updateOne(
+        { _id: new mongoose.Types.ObjectId(reelB) },
+        { status: ReelStatus.HIDDEN },
+      );
+      const after = await request(app.getHttpServer())
+        .get(`/api/reels/reposted?userId=${reposterId}`)
+        .set('Authorization', `Bearer ${viewerToken}`)
+        .expect(200);
+      expect(after.body.items.map((i: FeedItem) => i.id)).toEqual([reelA]);
+    });
+
+    it('defaults to the caller when userId is omitted, and empty when nothing is reposted', async () => {
+      const selfId = '0000000000000000000000d0';
+      const creatorId = '0000000000000000000000d1';
+      const selfToken = await tokenFor(selfId);
+      await tokenFor(creatorId);
+
+      const empty = await request(app.getHttpServer())
+        .get('/api/reels/reposted')
+        .set('Authorization', `Bearer ${selfToken}`)
+        .expect(200);
+      expect((empty.body as RepostsBody).items).toEqual([]);
+
+      const reel = await createPublishedReel(creatorId);
+      await request(app.getHttpServer())
+        .post(`/api/reels/${reel}/repost`)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .expect(201);
+      const mine = await request(app.getHttpServer())
+        .get('/api/reels/reposted')
+        .set('Authorization', `Bearer ${selfToken}`)
+        .expect(200);
+      expect((mine.body as RepostsBody).items.map((i) => i.id)).toEqual([reel]);
+    });
+  });
+
   describe('public store-redirect page (FR-039a, no auth)', () => {
     it('serves HTML without a token', async () => {
       const res = await request(app.getHttpServer())

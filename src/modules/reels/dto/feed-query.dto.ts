@@ -21,6 +21,12 @@ export class FeedQueryDto {
   @IsOptional()
   @IsString()
   hashtag?: string;
+
+  // v6: the target user for the public Reposts list (GET /reposted). Defaults
+  // to the caller when omitted.
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export class CommentsQueryDto {
@@ -34,4 +40,18 @@ export class CommentsQueryDto {
   @Min(1)
   @Max(50)
   limit?: number = 20;
+}
+
+// v5 (FR-084, contracts §31): feeds the mention-suggestion overlay.
+export class FollowingUsersQueryDto {
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 50;
 }

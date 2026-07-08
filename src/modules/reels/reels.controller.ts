@@ -28,7 +28,11 @@ const execFileAsync = promisify(execFile);
 const FFMPEG_BIN = ffmpegInstaller.path;
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ReelsService } from './reels.service';
-import { CommentsQueryDto, FeedQueryDto } from './dto/feed-query.dto';
+import {
+  CommentsQueryDto,
+  FeedQueryDto,
+  FollowingUsersQueryDto,
+} from './dto/feed-query.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateReelDto } from './dto/create-reel.dto';
 import { SearchQueryDto } from './dto/search-query.dto';
@@ -66,6 +70,13 @@ export class ReelsController {
     return this.reelsService.getSaved(req.user.userId, query);
   }
 
+  // v6: public Reposts profile tab — `?userId=` selects whose reposts (defaults
+  // to the caller). Static route, same ordering rule as liked/saved above.
+  @Get('reposted')
+  getReposted(@Request() req: any, @Query() query: FeedQueryDto) {
+    return this.reelsService.getReposted(req.user.userId, query);
+  }
+
   @Get('search')
   searchReels(@Request() req: any, @Query() query: SearchQueryDto) {
     return this.reelsService.searchReels(req.user.userId, query);
@@ -76,6 +87,16 @@ export class ReelsController {
   @Get('following')
   getFollowingFeed(@Request() req: any, @Query() query: FeedQueryDto) {
     return this.reelsService.getFollowingFeed(req.user.userId, query);
+  }
+
+  // v5 (FR-084): followed-users list for the mention-suggestion overlay —
+  // static route, same ordering rule as liked/saved/search/following above.
+  @Get('me/following')
+  getFollowingUsers(
+    @Request() req: any,
+    @Query() query: FollowingUsersQueryDto,
+  ) {
+    return this.reelsService.getFollowingUsers(req.user.userId, query);
   }
 
   @Get()

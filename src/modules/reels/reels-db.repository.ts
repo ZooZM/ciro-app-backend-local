@@ -29,6 +29,7 @@ import {
   AdminHiddenReelDto,
   CommentDto,
   CreatorProfileDto,
+  FollowedUserDto,
   ReelDto,
   ReelReportReasonValue,
   ReelsRepository,
@@ -896,6 +897,56 @@ export class ReelsDbRepository implements ReelsRepository {
     };
   }
 
+  /**
+   * v6: [targetUserId]'s reposts, newest-repost-first (public tab). Rides the
+   * existing `reel_reposts` `{reposterId, createdAt}` index. Block + published
+   * visibility is filtered for [viewerId]; a reposted reel that has since left
+   * the published state (hidden/rejected/deleted) drops out via the standard
+   * `visibilityFilter`. Mirrors `listByRelation` but keys on `reposterId` and
+   * targets an arbitrary user rather than the caller.
+   */
+  async listReposted(
+    viewerId: string,
+    targetUserId: string,
+    params: { cursor?: string; limit: number; excludeCreatorIds: string[] },
+  ): Promise<{ items: ReelDto[]; nextCursor: string | null }> {
+    const reposterId = this.toObjectId(targetUserId);
+    if (!reposterId) return { items: [], nextCursor: null };
+    const offset = this.parseCursor(params.cursor);
+
+    const total = await this.repostModel.countDocuments({ reposterId }).exec();
+    if (total === 0) return { items: [], nextCursor: null };
+
+    const relations = await this.repostModel
+      .find({ reposterId })
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(params.limit)
+      .lean()
+      .exec();
+    const videoIds = relations.map((r) => r.videoId);
+    const reels = await this.reelModel
+      .find({
+        _id: { $in: videoIds },
+        ...this.excludeFilter(params.excludeCreatorIds),
+        ...this.visibilityFilter(viewerId),
+      })
+      .exec();
+    const reelById = new Map<string, ReelDocument>(
+      reels.map((r) => [r._id.toString(), r as unknown as ReelDocument]),
+    );
+    // Preserve repost-recency order; drop any reel filtered out above.
+    const ordered = videoIds
+      .map((id) => reelById.get(id.toString()))
+      .filter((r): r is ReelDocument => r !== undefined);
+
+    const nextOffset = offset + params.limit;
+    return {
+      items: await this.hydrate(ordered, viewerId),
+      nextCursor: nextOffset < total ? String(nextOffset) : null,
+    };
+  }
+
   async searchReels(params: {
     viewerId: string;
     q: string;
@@ -975,6 +1026,67 @@ export class ReelsDbRepository implements ReelsRepository {
         avatarUrl: u.avatarUrl ?? '',
         viewerFollowing: followedSet.has(u._id.toString()),
       })),
+      nextCursor: nextOffset < total ? String(nextOffset) : null,
+    };
+  }
+
+  /**
+   * v5 (FR-084, R24): the caller's followees, most-recently-followed first —
+   * rides the existing `{followerId, createdAt}` index. Blocked followees
+   * are excluded defensively (a block does not delete the follow relation).
+   * Order comes from the `Follow` relation, not the `User` collection, so
+   * followees are hydrated then re-sorted to match the paged follow order.
+   */
+  async getFollowingUsers(params: {
+    viewerId: string;
+    cursor?: string;
+    limit: number;
+    excludeUserIds: string[];
+  }): Promise<{ items: FollowedUserDto[]; nextCursor: string | null }> {
+    const viewerObjectId = this.toObjectId(params.viewerId);
+    if (!viewerObjectId) return { items: [], nextCursor: null };
+
+    const excludeIds = params.excludeUserIds
+      .map((id) => this.toObjectId(id))
+      .filter((id): id is Types.ObjectId => id !== null);
+    const filter: Record<string, unknown> = {
+      followerId: viewerObjectId,
+      ...(excludeIds.length > 0 ? { followeeId: { $nin: excludeIds } } : {}),
+    };
+
+    const offset = this.parseCursor(params.cursor);
+    const total = await this.followModel.countDocuments(filter).exec();
+    if (total === 0) return { items: [], nextCursor: null };
+
+    const follows = await this.followModel
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(params.limit)
+      .lean()
+      .exec();
+    const orderedFolloweeIds = follows.map((f) => f.followeeId.toString());
+
+    const users = await this.userModel
+      .find({ _id: { $in: follows.map((f) => f.followeeId) } })
+      .select('username name avatarUrl')
+      .lean()
+      .exec();
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const items: FollowedUserDto[] = orderedFolloweeIds
+      .map((id) => userById.get(id))
+      .filter((u): u is NonNullable<typeof u> => u !== undefined)
+      .map((u) => ({
+        id: u._id.toString(),
+        username: u.username ?? '',
+        name: u.name,
+        avatarUrl: u.avatarUrl ?? '',
+      }));
+
+    const nextOffset = offset + params.limit;
+    return {
+      items,
       nextCursor: nextOffset < total ? String(nextOffset) : null,
     };
   }

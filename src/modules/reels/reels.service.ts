@@ -16,7 +16,11 @@ import { Queue } from 'bullmq';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { REELS_REPOSITORY } from './reels.repository';
 import type { ReelReportReasonValue, ReelsRepository } from './reels.repository';
-import { FeedQueryDto, CommentsQueryDto } from './dto/feed-query.dto';
+import {
+  FeedQueryDto,
+  CommentsQueryDto,
+  FollowingUsersQueryDto,
+} from './dto/feed-query.dto';
 import { SearchQueryDto } from './dto/search-query.dto';
 import { ReelsNotificationsService } from './reels-notifications.service';
 import { parseHashtagsAndMentions } from './reels-text.util';
@@ -126,6 +130,20 @@ export class ReelsService {
     });
   }
 
+  /**
+   * v5 (FR-084): the caller's followees, most-recently-followed first —
+   * powers the post-details `@`-mention suggestion overlay (R24/contracts §31).
+   */
+  async getFollowingUsers(viewerId: string, query: FollowingUsersQueryDto) {
+    const excludeUserIds = await this.getBlockSet(viewerId);
+    return this.repository.getFollowingUsers({
+      viewerId,
+      cursor: query.cursor,
+      limit: query.limit ?? 50,
+      excludeUserIds,
+    });
+  }
+
   async getReel(id: string, viewerId: string) {
     const excludeCreatorIds = await this.getBlockSet(viewerId);
     const reel = await this.repository.getReel(id, viewerId, excludeCreatorIds);
@@ -223,6 +241,19 @@ export class ReelsService {
   async getSaved(viewerId: string, query: FeedQueryDto) {
     const excludeCreatorIds = await this.getBlockSet(viewerId);
     return this.repository.listSaved(viewerId, {
+      cursor: query.cursor,
+      limit: query.limit ?? 10,
+      excludeCreatorIds,
+    });
+  }
+
+  /**
+   * v6: the public Reposts profile tab — reposts by `query.userId` (defaults
+   * to the caller). Block/published visibility is applied for the viewer.
+   */
+  async getReposted(viewerId: string, query: FeedQueryDto) {
+    const excludeCreatorIds = await this.getBlockSet(viewerId);
+    return this.repository.listReposted(viewerId, query.userId ?? viewerId, {
       cursor: query.cursor,
       limit: query.limit ?? 10,
       excludeCreatorIds,

@@ -61,6 +61,8 @@ describe('ReelsService', () => {
       repostReel: jest.fn(),
       unrepostReel: jest.fn(),
       listFollowingFeed: jest.fn(),
+      getFollowingUsers: jest.fn(),
+      listReposted: jest.fn(),
     };
 
     userModel = {
@@ -420,6 +422,54 @@ describe('ReelsService', () => {
         expect.objectContaining({ viewerId, cursor: undefined, limit: 10 }),
       );
       expect(result).toBe(page);
+    });
+
+    // v5 (FR-084): mention-suggestion source.
+    it('getFollowingUsers defaults to limit 50 and forwards the block set + repository page', async () => {
+      const page = {
+        items: [
+          { id: otherId, username: 'sara', name: 'Sara', avatarUrl: '' },
+        ],
+        nextCursor: null,
+      };
+      repository.getFollowingUsers.mockResolvedValue(page);
+      const result = await service.getFollowingUsers(viewerId, {});
+      expect(repository.getFollowingUsers).toHaveBeenCalledWith(
+        expect.objectContaining({ viewerId, cursor: undefined, limit: 50 }),
+      );
+      expect(result).toBe(page);
+    });
+
+    it('getFollowingUsers forwards an explicit cursor/limit unchanged', async () => {
+      const page = { items: [], nextCursor: '50' };
+      repository.getFollowingUsers.mockResolvedValue(page);
+      await service.getFollowingUsers(viewerId, { cursor: '10', limit: 25 });
+      expect(repository.getFollowingUsers).toHaveBeenCalledWith(
+        expect.objectContaining({ viewerId, cursor: '10', limit: 25 }),
+      );
+    });
+
+    // v6: public Reposts tab.
+    it('getReposted targets the query.userId (public) and forwards the block set', async () => {
+      const page = { items: [], nextCursor: null };
+      repository.listReposted.mockResolvedValue(page);
+      const result = await service.getReposted(viewerId, { userId: otherId });
+      expect(repository.listReposted).toHaveBeenCalledWith(
+        viewerId,
+        otherId,
+        expect.objectContaining({ cursor: undefined, limit: 10 }),
+      );
+      expect(result).toBe(page);
+    });
+
+    it('getReposted defaults the target to the caller when userId is omitted', async () => {
+      repository.listReposted.mockResolvedValue({ items: [], nextCursor: null });
+      await service.getReposted(viewerId, {});
+      expect(repository.listReposted).toHaveBeenCalledWith(
+        viewerId,
+        viewerId,
+        expect.anything(),
+      );
     });
   });
 });

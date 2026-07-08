@@ -107,6 +107,14 @@ export interface UserSearchResultDto {
   viewerFollowing: boolean;
 }
 
+/** v5 (FR-084): a followee entry for the mention-suggestion overlay. */
+export interface FollowedUserDto {
+  id: string;
+  username: string;
+  name: string;
+  avatarUrl: string;
+}
+
 /** v4 (FR-069): mirrors `ReelReportReason` schema enum's string values — kept
  * as a plain union here so this abstract-contract file stays free of any
  * Mongoose/schema import (consistent with the rest of the file). */
@@ -238,6 +246,18 @@ export interface ReelsRepository {
     params: { cursor?: string; limit: number; excludeCreatorIds: string[] },
   ): Promise<{ items: ReelDto[]; nextCursor: string | null }>;
 
+  /**
+   * v6: [targetUserId]'s reposts, newest-repost-first — the public Reposts
+   * profile tab. Unlike liked/saved this is NOT owner-scoped (reposting is a
+   * public distribution mechanic); [viewerId] still drives block + published
+   * visibility filtering.
+   */
+  listReposted(
+    viewerId: string,
+    targetUserId: string,
+    params: { cursor?: string; limit: number; excludeCreatorIds: string[] },
+  ): Promise<{ items: ReelDto[]; nextCursor: string | null }>;
+
   /** FR-057: reels whose hashtags contain `q` (case-insensitive substring). */
   searchReels(params: {
     viewerId: string;
@@ -255,6 +275,17 @@ export interface ReelsRepository {
     limit: number;
     excludeUserIds: string[];
   }): Promise<{ items: UserSearchResultDto[]; nextCursor: string | null }>;
+
+  /**
+   * v5 (FR-084): the caller's followees, most-recently-followed first —
+   * powers the post-details `@`-mention suggestion overlay (R24).
+   */
+  getFollowingUsers(params: {
+    viewerId: string;
+    cursor?: string;
+    limit: number;
+    excludeUserIds: string[];
+  }): Promise<{ items: FollowedUserDto[]; nextCursor: string | null }>;
 
   /**
    * v3 (FR-067): owner-only cascade delete — relation docs, reel-scoped
