@@ -51,6 +51,10 @@ export class ChatGateway
 
   private activeSockets = new Map<string, AuthenticatedSocket>();
   private activeCalls = new Map<string, string>(); // userId -> partnerId (1-on-1 calls)
+  // Outgoing 1-on-1 calls that have been requested but not yet accepted/rejected.
+  // callerId -> targetId. Lets us notify the callee if the caller cancels before
+  // it is answered (activeCalls is only populated on accept).
+  private pendingCalls = new Map<string, string>();
   // FR-038: extended to track recorders, start time and call type (data-model.md §3a)
   private activeGroupCalls = new Map<
     string,
@@ -209,6 +213,15 @@ export class ChatGateway
         }
         this.activeCalls.delete(client.user.userId);
         this.activeCalls.delete(partnerId);
+      }
+
+      // --- Cancel a pending (unanswered) outgoing call on disconnect ---
+      const pendingTarget = this.pendingCalls.get(client.user.userId);
+      if (pendingTarget) {
+        this.pendingCalls.delete(client.user.userId);
+        this.activeSockets
+          .get(pendingTarget)
+          ?.emit('callEnded', { reason: 'caller_disconnected' });
       }
 
       // --- FR-026: Clean up group calls on disconnect ---
@@ -547,7 +560,8 @@ export class ChatGateway
 
       const targetSocket = this.activeSockets.get(targetUser._id.toString());
       if (targetSocket) {
-        // Target is online
+        // Target is online — track as pending so a pre-answer cancel can notify it.
+        this.pendingCalls.set(client.user.userId, targetUser._id.toString());
         targetSocket.emit('incomingCall', {
           callerId: client.user.phoneNumber,
           callerName: caller.name,
@@ -588,6 +602,9 @@ export class ChatGateway
 
     const callerDbId = callerUser._id.toString();
     const receiverDbId = client.user.userId;
+
+    // Call is being answered — no longer pending.
+    this.pendingCalls.delete(callerDbId);
 
     // Establish active call link (bidirectional)
     this.activeCalls.set(callerDbId, receiverDbId);
@@ -659,6 +676,9 @@ export class ChatGateway
     );
     if (!callerUser) return;
 
+    // Call was declined — clear any pending entry for this caller.
+    this.pendingCalls.delete(callerUser._id.toString());
+
     const callerSocket = this.activeSockets.get(callerUser._id.toString());
     if (callerSocket) {
       // Notify caller
@@ -687,6 +707,19 @@ export class ChatGateway
       this.activeCalls.delete(partnerId);
 
       this.logger.log(`[Call] Call ended between ${userId} and ${partnerId}`);
+      return;
+    }
+
+    // Pre-answer cancel: the caller hung up before the callee accepted, so there
+    // is no activeCalls link yet. Notify the pending callee so it stops ringing.
+    const pendingTarget = this.pendingCalls.get(userId);
+    if (pendingTarget) {
+      this.pendingCalls.delete(userId);
+      const targetSocket = this.activeSockets.get(pendingTarget);
+      if (targetSocket) {
+        targetSocket.emit('callEnded', { reason: 'caller_canceled' });
+      }
+      this.logger.log(`[Call] User ${userId} canceled call to ${pendingTarget}`);
     }
   }
 
