@@ -35,9 +35,9 @@ import * as Joi from 'joi';
         LIVEKIT_WS_URL: Joi.string().required(),
 
         // On-Demand Real-time Video Call Translation (specs/001-realtime-call-translation)
-        GOOGLE_APPLICATION_CREDENTIALS: Joi.string().optional(),
-        GOOGLE_APPLICATION_CREDENTIALS_JSON: Joi.string().optional(),
-        GOOGLE_PROJECT_ID: Joi.string().optional(),
+        GOOGLE_APPLICATION_CREDENTIALS: Joi.string().optional().allow(''),
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: Joi.string().optional().allow(''),
+        GOOGLE_PROJECT_ID: Joi.string().optional().allow(''),
         TRANSLATION_PRIMARY_LANGUAGE: Joi.string().default('en-US'),
         TRANSLATION_CANDIDATE_LANGUAGES:
           Joi.string().default('ar-SA,fr-FR,es-ES'),
