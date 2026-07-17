@@ -33,9 +33,16 @@ jobs:
           envs: MOD_PROVIDER,SIGHT_USER,SIGHT_SECRET,AUTOHIDE_THRESHOLD,DAILY_LIMIT,ADMIN_KEY 
           script: |
             cd /var/www/html/ciro-chat-backend
-            
-            echo "Pulling latest changes from Git..."
-            git pull origin main
+
+            echo "Fetching latest changes from Git..."
+            # Force the server checkout to mirror origin/main exactly. A plain
+            # `git pull` fails when the server's local branch has diverged from
+            # origin ("Need to specify how to reconcile divergent branches"),
+            # which aborts the whole deploy under `script_stop: true`. A hard
+            # reset is safe because .env and uploads/ are gitignored (untracked)
+            # and so are never touched.
+            git fetch origin main
+            git reset --hard origin/main
             
             echo "Updating .env file with existing and new Secrets..."
             
