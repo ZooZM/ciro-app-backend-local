@@ -1,0 +1,56 @@
+name: Server Diagnostics (read logs)
+
+# Manually triggered from the GitHub Actions tab. SSHes into the VPS and prints
+# container status + recent logs + a health check so the real server error is
+# visible in the Actions output (no direct server access required).
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect server diagnostics
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 5m
+          # Never abort: we want every section to run even if one fails.
+          script_stop: false
+          script: |
+            cd /var/www/html/ciro-chat-backend || exit 0
+
+            echo "==================== CONTAINER STATUS ===================="
+            docker compose ps || docker ps -a
+
+            echo ""
+            echo "==================== APP LOGS (last 300) ===================="
+            docker logs --tail 300 chat-app-backend 2>&1 || echo "app container not found"
+
+            echo ""
+            echo "==================== MONGO LOGS (last 60) ===================="
+            docker logs --tail 60 chat-mongo 2>&1 || echo "mongo container not found"
+
+            echo ""
+            echo "==================== REDIS LOGS (last 40) ===================="
+            docker logs --tail 40 chat-redis 2>&1 || echo "redis container not found"
+
+            echo ""
+            echo "==================== HEALTH CHECK (from host) ===================="
+            curl -sS -m 10 -i http://localhost:3008/health || echo "health check failed"
+
+            echo ""
+            echo "==================== APP -> MONGO/REDIS CONNECTIVITY ===================="
+            docker exec chat-app-backend sh -c 'getent hosts chat-mongo; getent hosts chat-redis' 2>&1 || echo "could not resolve service names from app container"
+
+            echo ""
+            echo "==================== DISK SPACE ===================="
+            df -h / || true
+
+            echo ""
+            echo "==================== ENV KEYS PRESENT (names only, no values) ===================="
+            # Print only variable NAMES so nothing secret leaks into the log.
+            sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' .env | sort || echo "no .env"
