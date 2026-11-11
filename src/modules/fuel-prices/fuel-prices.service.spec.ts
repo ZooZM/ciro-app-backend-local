@@ -3,7 +3,6 @@ import { FuelPricesService } from './fuel-prices.service';
 import { FuelPricesRepository } from './fuel-prices.repository';
 import { UpdateFuelPricesDto } from './dto/update-fuel-prices.dto';
 import { FuelPrices } from './schemas/fuel-prices.schmea';
-import { Types } from 'mongoose';
 
 describe('FuelPricesService', () => {
   let service: FuelPricesService;
@@ -13,7 +12,7 @@ describe('FuelPricesService', () => {
   };
 
   const fuelPrices: FuelPrices = {
-    _id: new Types.ObjectId(),
+    _id: 'fuel_prices',
     gasoline_91: 1.1,
     gasoline_95: 1.2,
     gasoline_98: 1.3,

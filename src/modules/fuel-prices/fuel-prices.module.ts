@@ -3,6 +3,7 @@ import { FuelPricesService } from './fuel-prices.service';
 import { FuelPricesController } from './fuel-prices.controller';
 import { FuelPrices, FuelPricesSchema } from './schemas/fuel-prices.schmea';
 import { MongooseModule } from '@nestjs/mongoose';
+import { FuelPricesRepository } from './fuel-prices.repository';
 
 @Module({
   imports: [
@@ -11,6 +12,6 @@ import { MongooseModule } from '@nestjs/mongoose';
     ]),
   ],
   controllers: [FuelPricesController],
-  providers: [FuelPricesService],
+  providers: [FuelPricesService, FuelPricesRepository],
 })
 export class FuelPricesModule {}
