@@ -1,6 +1,7 @@
 import { IsNumber } from 'class-validator';
+import { FuelTypes } from '../enum/fuel-types-enum';
 
-export class UpdateFuelPricesDto {
+export class UpdateFuelPricesDto implements Record<FuelTypes, number> {
   @IsNumber()
   gasoline_91!: number;
 
