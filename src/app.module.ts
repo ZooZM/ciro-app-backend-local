@@ -16,6 +16,7 @@ import { MapModule } from './modules/map/map.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { TranslationModule } from './modules/translation/translation.module';
 import { ReelsModule } from './modules/reels/reels.module';
+import { FuelPricesModule } from './modules/fuel-prices/fuel-prices.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -114,6 +115,7 @@ import * as Joi from 'joi';
     PaymentModule,
     TranslationModule,
     ReelsModule,
+    FuelPricesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
