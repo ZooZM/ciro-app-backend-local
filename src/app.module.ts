@@ -18,6 +18,7 @@ import { TranslationModule } from './modules/translation/translation.module';
 import { ReelsModule } from './modules/reels/reels.module';
 import { FuelPricesModule } from './modules/fuel-prices/fuel-prices.module';
 import { StationsModule } from './modules/stations/stations.module';
+import { CarsModule } from './modules/cars/cars.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -118,6 +119,7 @@ import * as Joi from 'joi';
     ReelsModule,
     FuelPricesModule,
     StationsModule,
+    CarsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
