@@ -51,6 +51,10 @@ export class UsersService {
     return this.usersRepository.findById(id);
   }
 
+  async exists(id: string): Promise<boolean> {
+    return !!(await this.usersRepository.exists(id));
+  }
+
   async updateRefreshToken(
     id: string,
     refreshToken: string | null,

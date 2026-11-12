@@ -47,6 +47,10 @@ export class UsersRepository extends BaseRepository<UserDocument> {
       .exec();
   }
 
+  async exists(id: string): Promise<{ _id: Types.ObjectId } | null> {
+    return this.userModel.exists({ _id: id });
+  }
+
   /** Lean read of the listener's authoritative translation balance, in seconds (FR-021). */
   async getTranslationBalanceSeconds(userId: string): Promise<number> {
     const user = await this.userModel
