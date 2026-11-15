@@ -49,10 +49,22 @@ export class Car {
   @Prop({ type: Boolean, required: true, default: false })
   isGpsEnabled: boolean;
 
-  @Prop({ type: String, required: false, trim: true, unique: true })
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    unique: true,
+    sparse: true,
+  })
   gpsId?: string;
 
-  @Prop({ type: String, required: false, trim: true, unique: true })
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    unique: true,
+    sparse: true,
+  })
   nfcId?: string;
 
   @Prop({ type: Number, required: true })

@@ -35,7 +35,7 @@ export class CarOwnershipsRepository {
       id,
       updateCarOwnershipDto,
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       },
     );

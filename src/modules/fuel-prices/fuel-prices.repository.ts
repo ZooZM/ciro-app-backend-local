@@ -27,7 +27,7 @@ export class FuelPricesRepository implements OnModuleInit {
         FUEL_PRICES_ID,
         { $set: updateData },
         {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         },
       )

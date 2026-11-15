@@ -13,5 +13,6 @@ import { CarsRepository } from './cars.repository';
   ],
   controllers: [CarsController],
   providers: [CarsService, CarsRepository],
+  exports: [CarsService],
 })
 export class CarsModule {}

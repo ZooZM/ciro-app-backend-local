@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -45,6 +44,10 @@ export class CarsService {
     }
 
     return car;
+  }
+
+  async exists(id: string): Promise<boolean> {
+    return !!(await this.carsRepository.exists(id));
   }
 
   async update(id: string, updateCarDto: UpdateCarDto): Promise<Car> {
