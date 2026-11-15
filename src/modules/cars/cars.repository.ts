@@ -21,7 +21,7 @@ export class CarsRepository {
   async update(id: string, updateCarDto: UpdateCarDto): Promise<Car | null> {
     return this.carsModel.findByIdAndUpdate(id, updateCarDto, {
       runValidators: true,
-      new: true,
+      returnDocument: 'after',
     });
   }
 
@@ -31,6 +31,10 @@ export class CarsRepository {
 
   async findAllByOwnerId(id: string): Promise<Car[]> {
     return this.carsModel.find({ owner: id });
+  }
+
+  async exists(id: string): Promise<{ _id: Types.ObjectId } | null> {
+    return this.carsModel.exists({ _id: id });
   }
 
   async remove(id: string): Promise<Car | null> {
@@ -45,7 +49,7 @@ export class CarsRepository {
   ): Promise<Car | null> {
     return this.carsModel.findByIdAndUpdate(id, adminUpdateCarDto, {
       runValidators: true,
-      new: true,
+      returnDocument: 'after',
     });
   }
 }
