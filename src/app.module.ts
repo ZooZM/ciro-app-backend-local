@@ -20,6 +20,7 @@ import { FuelPricesModule } from './modules/fuel-prices/fuel-prices.module';
 import { StationsModule } from './modules/stations/stations.module';
 import { CarsModule } from './modules/cars/cars.module';
 import { CarOwnershipsModule } from './modules/car-ownerships/car-ownerships.module';
+import { DriverInvitationsModule } from './modules/driver-invitations/driver-invitations.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -122,6 +123,7 @@ import * as Joi from 'joi';
     StationsModule,
     CarsModule,
     CarOwnershipsModule,
+    DriverInvitationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
