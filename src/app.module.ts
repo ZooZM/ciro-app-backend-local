@@ -19,6 +19,7 @@ import { ReelsModule } from './modules/reels/reels.module';
 import { FuelPricesModule } from './modules/fuel-prices/fuel-prices.module';
 import { StationsModule } from './modules/stations/stations.module';
 import { CarsModule } from './modules/cars/cars.module';
+import { CarOwnershipsModule } from './modules/car-ownerships/car-ownerships.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -120,6 +121,7 @@ import * as Joi from 'joi';
     FuelPricesModule,
     StationsModule,
     CarsModule,
+    CarOwnershipsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
