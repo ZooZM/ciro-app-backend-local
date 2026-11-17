@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VideoService } from './video.service';
 import { ConfigService } from '@nestjs/config';
+import { ChatRoomsRepository } from '../chat/chat-rooms.repository';
 
 // Mock livekit-server-sdk
 jest.mock('livekit-server-sdk', () => {
@@ -29,6 +30,10 @@ describe('VideoService', () => {
       providers: [
         VideoService,
         { provide: ConfigService, useValue: configService },
+        {
+          provide: ChatRoomsRepository,
+          useValue: { findOne: jest.fn().mockResolvedValue({}) },
+        },
       ],
     }).compile();
 

@@ -2,7 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { StationsRepository } from './stations.repository';
-import { EARTH_RADIUS } from 'src/common/consts/geo.consts';
+import { EARTH_RADIUS } from '../../common/consts/geo.consts';
 import { Location } from './schemas/station.schema';
 
 // 10 meters / Earth radius in meters
@@ -40,8 +40,24 @@ export class StationsService {
     return this.stationsRepository.find({});
   }
 
-  findOne(id: string) {
+  findById(id: string) {
     return this.stationsRepository.findOne({ _id: id });
+  }
+
+  async findNearbyStation(lng: number, lat: number) {
+    const station = await this.stationsRepository.findNearbyStation(
+      lng,
+      lat,
+      MIN_DISTANCE_BETWEEN_STATIONS,
+    );
+
+    if (!station) {
+      throw new ConflictException(
+        `No station exists within ${MIN_DISTANCE_METERS} meters of this location`,
+      );
+    }
+
+    return station;
   }
 
   // TODO: what if the location is a bit different

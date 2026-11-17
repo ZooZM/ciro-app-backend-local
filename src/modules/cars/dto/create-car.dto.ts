@@ -8,11 +8,9 @@ import {
   IsOptional,
   IsString,
   Matches,
-  Min,
 } from 'class-validator';
 import { VehicleCategory } from '../enum/vehicle-category.enum';
-import { IsObjectIdPipe } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { FuelTypes } from '../../fuel-prices/enum/fuel-types-enum';
 
 // Latin letters, e.g. "ABC 1234", "ABC1234", "A B C 123"
 // const KSA_PLATE_LATIN = /^[ABJDRSXTEGKLZNHUV]{3}\d{1,4}$/;
@@ -32,7 +30,7 @@ export class CreateCarDto {
   @IsNotEmpty()
   brand: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.replace(/\s+/g, '').toUpperCase() : value,
   )
   @IsString()
@@ -44,6 +42,9 @@ export class CreateCarDto {
 
   @IsEnum(VehicleCategory)
   vehicleCategory: string;
+
+  @IsEnum(FuelTypes)
+  fuelType: FuelTypes;
 
   @IsString()
   @IsNotEmpty()

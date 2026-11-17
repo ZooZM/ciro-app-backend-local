@@ -11,6 +11,7 @@ import { UpdateCarDto } from './dto/update-car.dto';
 import { AdminUpdateCarDto } from './dto/admin-update-car.dto';
 import { VehicleCategory } from './enum/vehicle-category.enum';
 import { Car } from './schemas/car.schema';
+import { FuelTypes } from '../fuel-prices/enum/fuel-types-enum';
 
 describe('CarsController', () => {
   let controller: CarsController;
@@ -29,6 +30,7 @@ describe('CarsController', () => {
     brand: 'Toyota',
     licensePlate: 'ABC1234',
     vehicleCategory: VehicleCategory.SEDAN,
+    fuelType: FuelTypes.GASOLINE_91,
     image: 'https://example.com/car.jpg',
     isActive: true,
     owner: new Types.ObjectId(ownerId),
@@ -40,6 +42,7 @@ describe('CarsController', () => {
     brand: car.brand,
     licensePlate: car.licensePlate,
     vehicleCategory: car.vehicleCategory,
+    fuelType: car.fuelType,
     image: car.image,
     isActive: true,
     owner: ownerId,

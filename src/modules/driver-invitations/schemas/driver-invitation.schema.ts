@@ -5,8 +5,9 @@ import { User } from '../../users/schemas/user.schema';
 import { DriverInvitationStatus } from '../enum/driver-invitation-status.enum';
 
 export type DriverInvitationDocument = HydratedDocument<DriverInvitation>;
+export type DriverInvitationLean = DriverInvitation & { _id: Types.ObjectId };
 
-@Schema()
+@Schema({ timestamps: true })
 export class DriverInvitation {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: User.name, required: true })
   owner: Types.ObjectId;

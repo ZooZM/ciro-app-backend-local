@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Car, CarDocument } from './schemas/car.schema';
+import { Car, CarDocument, CarLean } from './schemas/car.schema';
 import { Model, Types } from 'mongoose';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
@@ -25,12 +25,16 @@ export class CarsRepository {
     });
   }
 
-  async findById(id: string): Promise<Car | null> {
-    return this.carsModel.findById(id);
+  async findById(id: string): Promise<CarLean | null> {
+    return this.carsModel.findById(id).lean().exec();
   }
 
-  async findAllByOwnerId(id: string): Promise<Car[]> {
-    return this.carsModel.find({ owner: id });
+  async findActiveByNfcId(nfcId: string): Promise<CarLean | null> {
+    return this.carsModel.findOne({ nfcId, isActive: true }).lean().exec();
+  }
+
+  async findAllByOwnerId(id: string): Promise<CarLean[]> {
+    return this.carsModel.find({ owner: id }).lean().exec();
   }
 
   async exists(id: string): Promise<{ _id: Types.ObjectId } | null> {

@@ -6,6 +6,7 @@ import { FuelTypes } from '../enum/fuel-types-enum';
 export const FUEL_PRICES_ID = 'fuel_prices';
 
 export type FuelPricesDocument = HydratedDocument<FuelPrices>;
+export type FuelPricesInvitationLean = FuelPrices & { _id: Types.ObjectId };
 
 @Schema({ timestamps: true })
 export class FuelPrices implements Record<FuelTypes, number> {

@@ -21,6 +21,7 @@ import { StationsModule } from './modules/stations/stations.module';
 import { CarsModule } from './modules/cars/cars.module';
 import { CarOwnershipsModule } from './modules/car-ownerships/car-ownerships.module';
 import { DriverInvitationsModule } from './modules/driver-invitations/driver-invitations.module';
+import { PaymentVerificationModule } from './modules/payment-verification/payment-verification.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -87,7 +88,7 @@ import * as Joi from 'joi';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         connection: {
           url:
             configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
@@ -102,7 +103,7 @@ import * as Joi from 'joi';
     // Configure MongoDB Connection
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('MONGODB_URI'),
       }),
       inject: [ConfigService],
@@ -124,6 +125,7 @@ import * as Joi from 'joi';
     CarsModule,
     CarOwnershipsModule,
     DriverInvitationsModule,
+    PaymentVerificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

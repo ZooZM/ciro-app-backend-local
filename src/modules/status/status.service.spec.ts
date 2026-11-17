@@ -10,6 +10,7 @@ import { StatusRepository } from './status.repository';
 import { UsersRepository } from '../users/users.repository';
 import { ChatService } from '../chat/chat.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { PushService } from '../notifications/push.service';
 import { StatusContentType, StatusPrivacy } from './schemas/status.schema';
 
 describe('StatusService', () => {
@@ -17,7 +18,7 @@ describe('StatusService', () => {
   let statusRepository: jest.Mocked<Partial<StatusRepository>>;
   let usersRepository: jest.Mocked<Partial<UsersRepository>>;
   let chatService: jest.Mocked<Partial<ChatService>>;
-  let chatGateway: { server: any };
+  let chatGateway: { server: { to: jest.Mock; emit: jest.Mock } };
 
   const authorId = new Types.ObjectId();
   const otherUserId = new Types.ObjectId();
@@ -70,6 +71,12 @@ describe('StatusService', () => {
         { provide: UsersRepository, useValue: usersRepository },
         { provide: ChatService, useValue: chatService },
         { provide: ChatGateway, useValue: chatGateway },
+        {
+          provide: PushService,
+          useValue: {
+            notifyStatusReaction: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -321,7 +328,9 @@ describe('StatusService', () => {
         'statusViewerAdded',
         expect.objectContaining({
           statusId: 'status-1',
-          viewer: expect.objectContaining({ userId: otherUserId.toString() }),
+          viewer: expect.objectContaining({
+            userId: otherUserId.toString(),
+          }) as object,
         }),
       );
     });
@@ -419,7 +428,9 @@ describe('StatusService', () => {
         otherUserId.toString(),
         expect.objectContaining({ chatRoomId: 'room-1', content: 'hi' }),
         expect.objectContaining({
-          statusRef: expect.objectContaining({ statusId: status._id }),
+          statusRef: expect.objectContaining({
+            statusId: status._id,
+          }) as object,
         }),
       );
       expect(chatGateway.server.to).toHaveBeenCalledWith('room-1');

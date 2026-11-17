@@ -13,5 +13,6 @@ import { FuelPricesRepository } from './fuel-prices.repository';
   ],
   controllers: [FuelPricesController],
   providers: [FuelPricesService, FuelPricesRepository],
+  exports: [FuelPricesService],
 })
 export class FuelPricesModule {}

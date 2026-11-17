@@ -9,6 +9,7 @@ import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { VehicleCategory } from './enum/vehicle-category.enum';
 import { Car } from './schemas/car.schema';
+import { FuelTypes } from '../fuel-prices/enum/fuel-types-enum';
 
 describe('CarsService', () => {
   let service: CarsService;
@@ -28,6 +29,7 @@ describe('CarsService', () => {
     brand: 'Toyota',
     licensePlate: 'ABC1234',
     vehicleCategory: VehicleCategory.SEDAN,
+    fuelType: FuelTypes.GASOLINE_91,
     image: 'https://example.com/car.jpg',
     isActive: true,
     owner: new Types.ObjectId(ownerId),
@@ -39,6 +41,7 @@ describe('CarsService', () => {
     brand: car.brand,
     licensePlate: car.licensePlate,
     vehicleCategory: car.vehicleCategory,
+    fuelType: car.fuelType,
     image: car.image,
     isActive: true,
     owner: ownerId,
