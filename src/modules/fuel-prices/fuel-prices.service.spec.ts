@@ -7,8 +7,8 @@ import { FuelPrices } from './schemas/fuel-prices.schmea';
 describe('FuelPricesService', () => {
   let service: FuelPricesService;
   let fuelPricesRepository: {
-    getFuelPrices: jest.Mock;
-    updateFuelPrices: jest.Mock;
+    getCurrent: jest.Mock;
+    update: jest.Mock;
   };
 
   const fuelPrices: FuelPrices = {
@@ -30,8 +30,8 @@ describe('FuelPricesService', () => {
 
   beforeEach(async () => {
     fuelPricesRepository = {
-      getFuelPrices: jest.fn(),
-      updateFuelPrices: jest.fn(),
+      getCurrent: jest.fn(),
+      update: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -44,33 +44,29 @@ describe('FuelPricesService', () => {
     service = module.get<FuelPricesService>(FuelPricesService);
   });
 
-  describe('getFuelPrices', () => {
+  describe('getCurrent', () => {
     it('returns the fuel prices from the repository', async () => {
-      fuelPricesRepository.getFuelPrices.mockResolvedValue(fuelPrices);
+      fuelPricesRepository.getCurrent.mockResolvedValue(fuelPrices);
 
-      await expect(service.getFuelPrices()).resolves.toBe(fuelPrices);
-      expect(fuelPricesRepository.getFuelPrices).toHaveBeenCalledTimes(1);
+      await expect(service.getCurrent()).resolves.toBe(fuelPrices);
+      expect(fuelPricesRepository.getCurrent).toHaveBeenCalledTimes(1);
     });
 
     it('throws when fuel prices do not exist', async () => {
-      fuelPricesRepository.getFuelPrices.mockResolvedValue(null);
+      fuelPricesRepository.getCurrent.mockResolvedValue(null);
 
-      await expect(service.getFuelPrices()).rejects.toThrow(
+      await expect(service.getCurrent()).rejects.toThrow(
         'Fuel prices not found',
       );
     });
   });
 
-  describe('updateFuelPrices', () => {
+  describe('update', () => {
     it('forwards the update data and returns the repository result', async () => {
-      fuelPricesRepository.updateFuelPrices.mockResolvedValue(fuelPrices);
+      fuelPricesRepository.update.mockResolvedValue(fuelPrices);
 
-      await expect(service.updateFuelPrices(updateData)).resolves.toBe(
-        fuelPrices,
-      );
-      expect(fuelPricesRepository.updateFuelPrices).toHaveBeenCalledWith(
-        updateData,
-      );
+      await expect(service.update(updateData)).resolves.toBe(fuelPrices);
+      expect(fuelPricesRepository.update).toHaveBeenCalledWith(updateData);
     });
   });
 });

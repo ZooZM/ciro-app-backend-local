@@ -6,8 +6,8 @@ import { UpdateFuelPricesDto } from './dto/update-fuel-prices.dto';
 describe('FuelPricesController', () => {
   let controller: FuelPricesController;
   let fuelPricesService: {
-    getFuelPrices: jest.Mock;
-    updateFuelPrices: jest.Mock;
+    getCurrent: jest.Mock;
+    update: jest.Mock;
   };
 
   const fuelPrices = {
@@ -28,8 +28,8 @@ describe('FuelPricesController', () => {
 
   beforeEach(async () => {
     fuelPricesService = {
-      getFuelPrices: jest.fn(),
-      updateFuelPrices: jest.fn(),
+      getCurrent: jest.fn(),
+      update: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,23 +42,21 @@ describe('FuelPricesController', () => {
 
   describe('getFuelPrices', () => {
     it('returns fuel prices from the service', async () => {
-      fuelPricesService.getFuelPrices.mockResolvedValue(fuelPrices);
+      fuelPricesService.getCurrent.mockResolvedValue(fuelPrices);
 
       await expect(controller.getFuelPrices()).resolves.toBe(fuelPrices);
-      expect(fuelPricesService.getFuelPrices).toHaveBeenCalledTimes(1);
+      expect(fuelPricesService.getCurrent).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('updateFuelPrices', () => {
     it('forwards update data and returns the service result', async () => {
-      fuelPricesService.updateFuelPrices.mockResolvedValue(fuelPrices);
+      fuelPricesService.update.mockResolvedValue(fuelPrices);
 
       await expect(controller.updateFuelPrices(updateData)).resolves.toBe(
         fuelPrices,
       );
-      expect(fuelPricesService.updateFuelPrices).toHaveBeenCalledWith(
-        updateData,
-      );
+      expect(fuelPricesService.update).toHaveBeenCalledWith(updateData);
     });
   });
 });

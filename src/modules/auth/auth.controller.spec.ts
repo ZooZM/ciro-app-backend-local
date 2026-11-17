@@ -5,10 +5,16 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { DeviceTokensRepository } from '../notifications/device-tokens.repository';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: jest.Mocked<AuthService>;
+  let authService: {
+    register: jest.Mock;
+    login: jest.Mock;
+    sendOtp: jest.Mock;
+    verifyOtp: jest.Mock;
+  };
 
   const mockAuthResponse = {
     accessToken: 'access-token',
@@ -21,7 +27,7 @@ describe('AuthController', () => {
   };
 
   beforeEach(async () => {
-    const mockAuthService = {
+    authService = {
       register: jest.fn().mockResolvedValue(mockAuthResponse),
       login: jest.fn().mockResolvedValue(mockAuthResponse),
       sendOtp: jest
@@ -35,13 +41,19 @@ describe('AuthController', () => {
       providers: [
         {
           provide: AuthService,
-          useValue: mockAuthService,
+          useValue: authService,
+        },
+        {
+          provide: DeviceTokensRepository,
+          useValue: {
+            upsertToken: jest.fn(),
+            deleteAllTokensForUser: jest.fn(),
+          },
         },
       ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
-    authService = module.get(AuthService);
   });
 
   it('should be defined', () => {

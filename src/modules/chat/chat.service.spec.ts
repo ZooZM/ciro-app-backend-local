@@ -1,15 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/mongoose';
 import { ChatService } from './chat.service';
-import { ChatRoom } from './schemas/chat-room.schema';
-import { Message } from './schemas/message.schema';
-import { Types, Model } from 'mongoose';
+import { ChatRoomsRepository } from './chat-rooms.repository';
+import { MessagesRepository } from './messages.repository';
+import { UsersRepository } from '../users/users.repository';
+import { Types } from 'mongoose';
 import { NotFoundException } from '@nestjs/common';
 
 describe('ChatService', () => {
   let service: ChatService;
-  let chatRoomModel: any;
-  let messageModel: any;
+  let chatRoomsRepository: {
+    findPrivateRoom: jest.Mock;
+    create: jest.Mock;
+    findById: jest.Mock;
+    updateLastMessage: jest.Mock;
+    getUserRooms: jest.Mock;
+  };
+  let messagesRepository: {
+    findByClientMessageId: jest.Mock;
+    create: jest.Mock;
+  };
 
   const mockRoom = {
     _id: new Types.ObjectId(),
@@ -24,36 +33,28 @@ describe('ChatService', () => {
     senderId: mockRoom.participants[0],
     content: 'Hello',
     save: jest.fn().mockResolvedValue({}),
+    populate: jest.fn().mockResolvedValue({}),
   };
 
   beforeEach(async () => {
-    chatRoomModel = {
-      findOne: jest.fn(),
+    chatRoomsRepository = {
+      findPrivateRoom: jest.fn(),
+      create: jest.fn().mockResolvedValue(mockRoom),
       findById: jest.fn(),
-      find: jest.fn(),
-      save: jest.fn(),
-      constructor: jest.fn().mockImplementation(() => mockRoom),
+      updateLastMessage: jest.fn(),
+      getUserRooms: jest.fn(),
     };
-    // To handle 'new this.chatRoomModel'
-    const chatRoomConstructor = jest.fn().mockReturnValue(mockRoom);
-    Object.assign(chatRoomConstructor, chatRoomModel);
-
-    messageModel = {
-      find: jest.fn(),
-      save: jest.fn(),
-      constructor: jest.fn().mockImplementation(() => mockMessage),
+    messagesRepository = {
+      findByClientMessageId: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue(mockMessage),
     };
-    const messageConstructor = jest.fn().mockReturnValue(mockMessage);
-    Object.assign(messageConstructor, messageModel);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
-        {
-          provide: getModelToken(ChatRoom.name),
-          useValue: chatRoomConstructor,
-        },
-        { provide: getModelToken(Message.name), useValue: messageConstructor },
+        { provide: ChatRoomsRepository, useValue: chatRoomsRepository },
+        { provide: MessagesRepository, useValue: messagesRepository },
+        { provide: UsersRepository, useValue: { findById: jest.fn() } },
       ],
     }).compile();
 
@@ -66,28 +67,29 @@ describe('ChatService', () => {
 
   describe('createPrivateRoom', () => {
     it('should return an existing room if it exists', async () => {
-      chatRoomModel.findOne.mockResolvedValue(mockRoom);
+      chatRoomsRepository.findPrivateRoom.mockResolvedValue(mockRoom);
       const result = await service.createPrivateRoom(
         mockRoom.participants[0].toHexString(),
         mockRoom.participants[1].toHexString(),
       );
       expect(result).toEqual(mockRoom);
-      expect(chatRoomModel.findOne).toHaveBeenCalled();
+      expect(chatRoomsRepository.findPrivateRoom).toHaveBeenCalled();
     });
 
     it('should create a new room if it does not exist', async () => {
-      chatRoomModel.findOne.mockResolvedValue(null);
+      chatRoomsRepository.findPrivateRoom.mockResolvedValue(null);
       const result = await service.createPrivateRoom(
         mockRoom.participants[0].toHexString(),
         mockRoom.participants[1].toHexString(),
       );
       expect(result).toBeDefined();
+      expect(chatRoomsRepository.create).toHaveBeenCalled();
     });
   });
 
   describe('saveMessage', () => {
     it('should throw NotFoundException if room does not exist', async () => {
-      chatRoomModel.findById.mockResolvedValue(null);
+      chatRoomsRepository.findById.mockResolvedValue(null);
       await expect(
         service.saveMessage(mockRoom.participants[0].toHexString(), {
           chatRoomId: mockRoom._id.toHexString(),
@@ -97,7 +99,7 @@ describe('ChatService', () => {
     });
 
     it('should save a message and update room lastMessage', async () => {
-      chatRoomModel.findById.mockResolvedValue(mockRoom);
+      chatRoomsRepository.findById.mockResolvedValue(mockRoom);
       const result = await service.saveMessage(
         mockRoom.participants[0].toHexString(),
         {
@@ -106,26 +108,26 @@ describe('ChatService', () => {
         },
       );
       expect(result).toBeDefined();
-      expect(mockRoom.save).toHaveBeenCalled();
+      expect(messagesRepository.create).toHaveBeenCalled();
+      expect(chatRoomsRepository.updateLastMessage).toHaveBeenCalledWith(
+        mockRoom._id.toHexString(),
+        mockMessage._id.toString(),
+      );
     });
   });
 
   describe('getUserRooms', () => {
     it('should query rooms for the given user', async () => {
-      const mockQuery = {
-        sort: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue([mockRoom]),
-      };
-      chatRoomModel.find.mockReturnValue(mockQuery);
+      chatRoomsRepository.getUserRooms.mockResolvedValue([mockRoom]);
 
       const result = await service.getUserRooms(
         mockRoom.participants[0].toHexString(),
       );
       expect(result).toEqual([mockRoom]);
-      expect(chatRoomModel.find).toHaveBeenCalledWith(
-        expect.objectContaining({ participants: expect.anything() }),
+      expect(chatRoomsRepository.getUserRooms).toHaveBeenCalledWith(
+        mockRoom.participants[0].toHexString(),
+        20,
+        undefined,
       );
     });
   });

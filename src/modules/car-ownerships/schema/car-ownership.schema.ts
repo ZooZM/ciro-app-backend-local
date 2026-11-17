@@ -4,8 +4,9 @@ import { Car } from '../../cars/schemas/car.schema';
 import { User } from '../../users/schemas/user.schema';
 
 export type CarOwnershipDocument = HydratedDocument<CarOwnership>;
+export type CarOwnershipLean = CarOwnership & { _id: Types.ObjectId };
 
-@Schema()
+@Schema({ timestamps: true })
 export class CarOwnership {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: User.name, required: true })
   owner: Types.ObjectId | User;

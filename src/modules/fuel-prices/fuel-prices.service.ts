@@ -7,17 +7,15 @@ import { UpdateFuelPricesDto } from './dto/update-fuel-prices.dto';
 export class FuelPricesService {
   constructor(private readonly fuelPricesRepository: FuelPricesRepository) {}
 
-  async getFuelPrices(): Promise<FuelPrices> {
-    const fuelPrices = await this.fuelPricesRepository.getFuelPrices();
+  async getCurrent(): Promise<FuelPrices> {
+    const fuelPrices = await this.fuelPricesRepository.getCurrent();
     if (!fuelPrices) {
       throw new Error('Fuel prices not found');
     }
     return fuelPrices;
   }
 
-  async updateFuelPrices(
-    updateData: UpdateFuelPricesDto,
-  ): Promise<FuelPrices | null> {
-    return this.fuelPricesRepository.updateFuelPrices(updateData);
+  async update(updateData: UpdateFuelPricesDto): Promise<FuelPrices | null> {
+    return this.fuelPricesRepository.update(updateData);
   }
 }

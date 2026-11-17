@@ -9,7 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { FuelTypes } from 'src/modules/fuel-prices/enum/fuel-types-enum';
+import { FuelTypes } from '../../fuel-prices/enum/fuel-types-enum';
 
 export class CreateStationDto {
   @IsString()

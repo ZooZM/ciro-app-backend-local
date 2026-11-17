@@ -1,12 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { CarsRepository } from './cars.repository';
 import { UsersService } from '../users/users.service';
-import { Car } from './schemas/car.schema';
+import { Car, CarLean } from './schemas/car.schema';
 import { AdminUpdateCarDto } from './dto/admin-update-car.dto';
 
 @Injectable()
@@ -36,7 +33,17 @@ export class CarsService {
     return this.carsRepository.findAllByOwnerId(id);
   }
 
-  async findById(id: string): Promise<Car> {
+  async findActiveByNfcId(id: string): Promise<CarLean> {
+    const car = await this.carsRepository.findActiveByNfcId(id);
+
+    if (!car) {
+      throw new NotFoundException('Car not found');
+    }
+
+    return car;
+  }
+
+  async findById(id: string): Promise<CarLean> {
     const car = await this.carsRepository.findById(id);
 
     if (!car) {

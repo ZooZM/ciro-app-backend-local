@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
-import { FuelTypes } from 'src/modules/fuel-prices/enum/fuel-types-enum';
+import { HydratedDocument, Types } from 'mongoose';
+import { FuelTypes } from '../../fuel-prices/enum/fuel-types-enum';
 
 @Schema({ _id: false })
 export class Location {
@@ -26,6 +26,7 @@ export class Location {
 }
 
 export type StationDocument = HydratedDocument<Station>;
+export type StationLean = Station & { _id: Types.ObjectId };
 
 @Schema({ timestamps: true })
 export class Station {
@@ -54,6 +55,9 @@ export class Station {
 
   @Prop({ type: String, required: true })
   address: string;
+
+  @Prop({ type: Boolean, required: true, default: true })
+  isActive: boolean;
 }
 
 export const StationSchema = SchemaFactory.createForClass(Station);

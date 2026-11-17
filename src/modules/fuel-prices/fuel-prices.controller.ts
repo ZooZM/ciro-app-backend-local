@@ -8,11 +8,11 @@ export class FuelPricesController {
 
   @Get()
   async getFuelPrices() {
-    return await this.fuelPricesService.getFuelPrices();
+    return await this.fuelPricesService.getCurrent();
   }
 
   @Put()
   async updateFuelPrices(@Body() updateData: UpdateFuelPricesDto) {
-    return await this.fuelPricesService.updateFuelPrices(updateData);
+    return await this.fuelPricesService.update(updateData);
   }
 }

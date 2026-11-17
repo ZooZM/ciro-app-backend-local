@@ -15,11 +15,11 @@ export class FuelPricesRepository implements OnModuleInit {
     private readonly fuelPricesModel: Model<FuelPricesDocument>,
   ) {}
 
-  async getFuelPrices(): Promise<FuelPricesDocument | null> {
+  async getCurrent(): Promise<FuelPricesDocument | null> {
     return this.fuelPricesModel.findById(FUEL_PRICES_ID).lean().exec();
   }
 
-  async updateFuelPrices(
+  async update(
     updateData: UpdateFuelPricesDto,
   ): Promise<FuelPricesDocument | null> {
     return this.fuelPricesModel

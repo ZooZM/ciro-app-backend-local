@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Station, StationDocument } from './schemas/station.schema';
 import { Model, Types } from 'mongoose';
-import { BaseRepository } from 'src/common/repositories/base.repository';
+import { BaseRepository } from '../../common/repositories/base.repository';
 
 @Injectable()
 export class StationsRepository extends BaseRepository<StationDocument> {
@@ -40,6 +40,20 @@ export class StationsRepository extends BaseRepository<StationDocument> {
 
   //     return this.stationsModel.create({ ...rest, location });
   //   }
+
+  async findNearbyStation(
+    lng: number,
+    lat: number,
+    radius: number,
+  ): Promise<StationDocument | null> {
+    return this.stationsModel.findOne({
+      location: {
+        $geoWithin: {
+          $centerSphere: [[lng, lat], radius],
+        },
+      },
+    });
+  }
 
   async existsNear(
     lng: number,
