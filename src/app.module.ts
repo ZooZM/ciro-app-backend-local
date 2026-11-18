@@ -22,6 +22,8 @@ import { CarsModule } from './modules/cars/cars.module';
 import { CarOwnershipsModule } from './modules/car-ownerships/car-ownerships.module';
 import { DriverInvitationsModule } from './modules/driver-invitations/driver-invitations.module';
 import { PaymentVerificationModule } from './modules/payment-verification/payment-verification.module';
+import { WalletsModule } from './modules/wallets/wallets.module';
+import { CiroFuelTransactionsModule } from './modules/ciro-fuel-transactions/ciro-fuel-transactions.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -126,6 +128,8 @@ import * as Joi from 'joi';
     CarOwnershipsModule,
     DriverInvitationsModule,
     PaymentVerificationModule,
+    WalletsModule,
+    CiroFuelTransactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
