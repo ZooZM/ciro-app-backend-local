@@ -16,14 +16,14 @@ import { MapModule } from './modules/map/map.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { TranslationModule } from './modules/translation/translation.module';
 import { ReelsModule } from './modules/reels/reels.module';
-import { FuelPricesModule } from './modules/fuel-prices/fuel-prices.module';
-import { StationsModule } from './modules/stations/stations.module';
-import { CarsModule } from './modules/cars/cars.module';
-import { CarOwnershipsModule } from './modules/car-ownerships/car-ownerships.module';
-import { DriverInvitationsModule } from './modules/driver-invitations/driver-invitations.module';
-import { PaymentVerificationModule } from './modules/payment-verification/payment-verification.module';
-import { WalletsModule } from './modules/wallets/wallets.module';
-import { CiroFuelTransactionsModule } from './modules/ciro-fuel-transactions/ciro-fuel-transactions.module';
+import { FuelPricesModule } from './modules/ciro-fuel/fuel-prices/fuel-prices.module';
+import { StationsModule } from './modules/ciro-fuel/stations/stations.module';
+import { CarsModule } from './modules/ciro-fuel/cars/cars.module';
+import { CarOwnershipsModule } from './modules/ciro-fuel/car-ownerships/car-ownerships.module';
+import { DriverInvitationsModule } from './modules/ciro-fuel/driver-invitations/driver-invitations.module';
+import { PaymentVerificationsModule } from './modules/ciro-fuel/payment-verifications/payment-verifications.module';
+import { WalletsModule } from './modules/ciro-fuel/wallets/wallets.module';
+import { CiroFuelTransactionsModule } from './modules/ciro-fuel/ciro-fuel-transactions/ciro-fuel-transactions.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -127,7 +127,7 @@ import * as Joi from 'joi';
     CarsModule,
     CarOwnershipsModule,
     DriverInvitationsModule,
-    PaymentVerificationModule,
+    PaymentVerificationsModule,
     WalletsModule,
     CiroFuelTransactionsModule,
   ],
