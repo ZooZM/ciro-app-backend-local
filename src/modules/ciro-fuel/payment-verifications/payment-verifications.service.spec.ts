@@ -17,6 +17,7 @@ import { PaymentVerificationsService } from './payment-verifications.service';
 import { CarsService } from '../cars/cars.service';
 import { FuelPricesService } from '../fuel-prices/fuel-prices.service';
 import { StationsService } from '../stations/stations.service';
+import { CiroFuelTransactionsService } from '../ciro-fuel-transactions/ciro-fuel-transactions.service';
 import type {
   PaymentVerification,
   PaymentVerificationDocument,
@@ -35,6 +36,7 @@ describe('PaymentVerificationsService', () => {
   };
   let stationsService: { findNearbyStation: jest.Mock; findById: jest.Mock };
   let fuelPricesService: { getCurrent: jest.Mock };
+  let ciroFuelTransactionsService: { create: jest.Mock };
   let lastUpdate: Partial<PaymentVerification> | undefined;
 
   const driverId = '507f1f77bcf86cd799439011';
@@ -131,6 +133,9 @@ describe('PaymentVerificationsService', () => {
         kerosene: 1.33,
       }),
     };
+    ciroFuelTransactionsService = {
+      create: jest.fn().mockResolvedValue({ _id: 'generic-transaction-id' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -139,6 +144,10 @@ describe('PaymentVerificationsService', () => {
         { provide: CarsService, useValue: carsService },
         { provide: StationsService, useValue: stationsService },
         { provide: FuelPricesService, useValue: fuelPricesService },
+        {
+          provide: CiroFuelTransactionsService,
+          useValue: ciroFuelTransactionsService,
+        },
       ],
     }).compile();
 
@@ -226,6 +235,38 @@ describe('PaymentVerificationsService', () => {
       }),
       expect.any(Date),
     );
+    expect(ciroFuelTransactionsService.create).toHaveBeenCalledWith({
+      amountPaid: 89.82,
+      amountRefueled: 41.2,
+      station: stationId,
+      car: carId.toString(),
+      driver: driverId,
+      owner: driverId,
+      paymentVerification: verificationId,
+      fuelType: FuelTypes.GASOLINE_91,
+    });
+  });
+
+  it('re-enqueues a transaction when completion is retried after acceptance', async () => {
+    repository.findByIdForDriver.mockResolvedValue(
+      verification(PaymentVerificationStatus.ACCEPTED, {
+        calculatedTotalAmount: 89.82,
+        carOwnerIdSnapshot: driverId,
+      }),
+    );
+
+    await expect(service.complete(verificationId, driverId)).resolves.toEqual(
+      expect.objectContaining({ status: PaymentVerificationStatus.ACCEPTED }),
+    );
+
+    expect(ciroFuelTransactionsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentVerification: verificationId,
+        owner: driverId,
+        amountPaid: 89.82,
+      }),
+    );
+    expect(repository.updateForDriverAtStatus).not.toHaveBeenCalled();
   });
 
   it('rejects mismatched unit price and total instead of accepting them', async () => {
@@ -243,6 +284,7 @@ describe('PaymentVerificationsService', () => {
       PaymentVerificationRejectionReason.UNIT_PRICE_MISMATCH,
       PaymentVerificationRejectionReason.TOTAL_AMOUNT_MISMATCH,
     ]);
+    expect(ciroFuelTransactionsService.create).not.toHaveBeenCalled();
   });
 
   it('rejects fuel not supported by the car or station and volume above tank capacity', async () => {

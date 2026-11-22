@@ -5,9 +5,16 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { WalletCurrency, WalletDocument } from './schemas/wallet.schema';
+import {
+  WalletCurrency,
+  WalletDocument,
+  WalletReservationStatus,
+} from './schemas/wallet.schema';
 import { WalletsRepository } from './wallets.repository';
-import { WalletsService } from './wallets.service';
+import {
+  InsufficientWalletBalanceException,
+  WalletsService,
+} from './wallets.service';
 
 describe('WalletsService', () => {
   let service: WalletsService;
@@ -16,6 +23,9 @@ describe('WalletsService', () => {
     findByOwnerId: jest.Mock;
     credit: jest.Mock;
     debit: jest.Mock;
+    reservePayment: jest.Mock;
+    settlePayment: jest.Mock;
+    releasePayment: jest.Mock;
   };
 
   const ownerId = '507f1f77bcf86cd799439011';
@@ -31,6 +41,9 @@ describe('WalletsService', () => {
       findByOwnerId: jest.fn(),
       credit: jest.fn(),
       debit: jest.fn(),
+      reservePayment: jest.fn(),
+      settlePayment: jest.fn(),
+      releasePayment: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -68,6 +81,7 @@ describe('WalletsService', () => {
 
   it('rejects a credit that exceeds the safe balance limit', async () => {
     walletsRepository.credit.mockResolvedValue(null);
+    walletsRepository.findByOwnerId.mockResolvedValue(wallet);
 
     await expect(service.credit(ownerId, 1)).rejects.toBeInstanceOf(
       ConflictException,
@@ -93,5 +107,43 @@ describe('WalletsService', () => {
 
     await expect(service.debit(ownerId, 100)).resolves.toBe(wallet);
     expect(walletsRepository.findByOwnerId).not.toHaveBeenCalled();
+  });
+
+  it('reserves an amount for a payment using the transaction id', async () => {
+    walletsRepository.findOrCreateByOwnerId.mockResolvedValue(wallet);
+    walletsRepository.reservePayment.mockResolvedValue({
+      wallet,
+      status: WalletReservationStatus.RESERVED,
+    });
+
+    await expect(
+      service.reservePayment(ownerId, 'payment-1', 100),
+    ).resolves.toBe(WalletReservationStatus.RESERVED);
+    expect(walletsRepository.reservePayment).toHaveBeenCalledWith(
+      ownerId,
+      'payment-1',
+      100,
+    );
+  });
+
+  it('rejects a reservation when available funds are insufficient', async () => {
+    walletsRepository.findOrCreateByOwnerId.mockResolvedValue(wallet);
+    walletsRepository.reservePayment.mockResolvedValue(null);
+
+    await expect(
+      service.reservePayment(ownerId, 'payment-1', 600),
+    ).rejects.toBeInstanceOf(InsufficientWalletBalanceException);
+  });
+
+  it('settles and releases payment reservations', async () => {
+    walletsRepository.settlePayment.mockResolvedValue(wallet);
+    walletsRepository.releasePayment.mockResolvedValue(wallet);
+
+    await expect(
+      service.settlePayment(ownerId, 'payment-1', 100),
+    ).resolves.toBe(wallet);
+    await expect(
+      service.releasePayment(ownerId, 'payment-2', 100),
+    ).resolves.toBe(wallet);
   });
 });

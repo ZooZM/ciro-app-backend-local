@@ -24,6 +24,7 @@ import { DriverInvitationsModule } from './modules/ciro-fuel/driver-invitations/
 import { PaymentVerificationsModule } from './modules/ciro-fuel/payment-verifications/payment-verifications.module';
 import { WalletsModule } from './modules/ciro-fuel/wallets/wallets.module';
 import { CiroFuelTransactionsModule } from './modules/ciro-fuel/ciro-fuel-transactions/ciro-fuel-transactions.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -130,6 +131,7 @@ import * as Joi from 'joi';
     PaymentVerificationsModule,
     WalletsModule,
     CiroFuelTransactionsModule,
+    TransactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

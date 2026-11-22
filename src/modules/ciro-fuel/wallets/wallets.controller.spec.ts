@@ -25,4 +25,21 @@ describe('WalletsController', () => {
 
     controller = module.get<WalletsController>(WalletsController);
   });
+
+  it('returns the authenticated owner wallet and spendable balance', async () => {
+    walletsService.getMyWallet.mockResolvedValue({
+      ...wallet,
+      reservedBalance: 100,
+    });
+
+    await expect(
+      controller.getMyWallet({ user: { userId: ownerId } }),
+    ).resolves.toEqual({
+      balance: 1250,
+      reservedBalance: 100,
+      availableBalance: 1150,
+      currency: WalletCurrency.SAR,
+    });
+    expect(walletsService.getMyWallet).toHaveBeenCalledWith(ownerId);
+  });
 });
