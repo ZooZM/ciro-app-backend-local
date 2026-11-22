@@ -6,6 +6,40 @@ export enum WalletCurrency {
   SAR = 'SAR',
 }
 
+export enum WalletReservationStatus {
+  RESERVED = 'reserved',
+  SETTLED = 'settled',
+  RELEASED = 'released',
+}
+
+@Schema({ _id: false })
+export class WalletPaymentReservation {
+  @Prop({ type: String, required: true })
+  transactionId: string;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 1,
+    validate: {
+      validator: (value: number) => Number.isSafeInteger(value),
+      message: 'Reservation amount must be a safe integer',
+    },
+  })
+  amount: number;
+
+  @Prop({
+    type: String,
+    enum: WalletReservationStatus,
+    required: true,
+  })
+  status: WalletReservationStatus;
+}
+
+const WalletPaymentReservationSchema = SchemaFactory.createForClass(
+  WalletPaymentReservation,
+);
+
 export type WalletDocument = HydratedDocument<Wallet>;
 
 @Schema({ timestamps: true })
@@ -29,6 +63,21 @@ export class Wallet {
     },
   })
   balance: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+    validate: {
+      validator: (value: number) => Number.isSafeInteger(value),
+      message: 'Reserved wallet balance must be a safe integer',
+    },
+  })
+  reservedBalance: number;
+
+  @Prop({ type: [WalletPaymentReservationSchema], default: [] })
+  paymentReservations: WalletPaymentReservation[];
 
   @Prop({
     type: String,

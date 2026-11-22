@@ -7,7 +7,9 @@ export const PAYMENT_VERIFICATION_UPLOAD_DIR = join(
   'payment-verification',
 );
 
-export const PAYMENT_VERIFICATION_SESSION_TTL_MS = 30 * 60 * 1000;
+export const CIRO_FUEL_PAYMENT_VERIFICATION_SESSION_TTL_MS = Number(
+  process.env.CIRO_FUEL_PAYMENT_VERIFICATION_SESSION_TTL_MS ?? 30 * 60 * 1000,
+);
 
 export const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',

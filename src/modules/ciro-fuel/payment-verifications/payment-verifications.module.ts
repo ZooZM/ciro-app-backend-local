@@ -11,6 +11,7 @@ import { PaymentVerificationStageGuard } from './guards/payment-verification-sta
 import { CarsModule } from '../cars/cars.module';
 import { FuelPricesModule } from '../fuel-prices/fuel-prices.module';
 import { StationsModule } from '../stations/stations.module';
+import { CiroFuelTransactionsModule } from '../ciro-fuel-transactions/ciro-fuel-transactions.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { StationsModule } from '../stations/stations.module';
     CarsModule,
     StationsModule,
     FuelPricesModule,
+    CiroFuelTransactionsModule,
   ],
   controllers: [paymentVerificationsController],
   providers: [

@@ -76,6 +76,9 @@ export class PaymentVerification {
   @Prop({ type: Number, min: 0 })
   carTankCapacitySnapshot?: number;
 
+  @Prop({ type: String, trim: true })
+  carOwnerIdSnapshot?: string;
+
   @Prop({ type: [String], enum: Object.values(FuelTypes) })
   stationFuelTypesSnapshot?: FuelTypes[];
 

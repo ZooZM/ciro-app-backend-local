@@ -5,11 +5,16 @@ import { FuelTypes } from '../../fuel-prices/enum/fuel-types-enum';
 import { PaymentVerification } from '../../payment-verifications/schemas/payment-verification.schema';
 import { Station } from '../../stations/schemas/station.schema';
 import { User } from '../../../users/schemas/user.schema';
+import type { UUID } from 'crypto';
+import { TransactionStatus } from '../enum/transaction-status.enum';
 
 export type CiroFuelTransactionDocument = HydratedDocument<CiroFuelTransaction>;
 
-@Schema({ timestamps: true })
+@Schema()
 export class CiroFuelTransaction {
+  @Prop({ type: String, required: true, unique: true })
+  _id: UUID;
+
   @Prop({ type: Number, required: true })
   amountPaid: number;
 
@@ -56,7 +61,27 @@ export class CiroFuelTransaction {
 
   @Prop({ type: String, enum: FuelTypes, required: true })
   fuelType: FuelTypes;
+
+  @Prop({
+    type: String,
+    enum: TransactionStatus,
+    required: true,
+    default: TransactionStatus.PENDING,
+  })
+  status: TransactionStatus;
+
+  @Prop({ type: Date })
+  paymentProcessingStartedAt?: Date;
+
+  @Prop({ type: Date })
+  transferSucceededAt?: Date;
+
+  @Prop({ type: String })
+  transferProviderReference?: string;
 }
 
 export const CiroFuelTransactionSchema =
   SchemaFactory.createForClass(CiroFuelTransaction);
+
+CiroFuelTransactionSchema.index({ paymentVerification: 1 }, { unique: true });
+CiroFuelTransactionSchema.index({ status: 1, paymentProcessingStartedAt: 1 });

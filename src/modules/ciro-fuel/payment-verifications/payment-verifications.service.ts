@@ -17,7 +17,7 @@ import { PaymentVerificationRejectionReason } from './enum/payment-verification-
 import { PaymentVerificationStatus } from './enum/payment-verification-status.enum';
 import {
   IMAGE_CONTENT_TYPES,
-  PAYMENT_VERIFICATION_SESSION_TTL_MS,
+  CIRO_FUEL_PAYMENT_VERIFICATION_SESSION_TTL_MS,
   PAYMENT_VERIFICATION_UPLOAD_DIR,
 } from './consts/payment-verification.constants';
 import { hasValidImageSignature } from './utils/image-signature.util';
@@ -29,6 +29,8 @@ import type {
 import { CarsService } from '../cars/cars.service';
 import { FuelPricesService } from '../fuel-prices/fuel-prices.service';
 import { StationsService } from '../stations/stations.service';
+import { CiroFuelTransactionsService } from '../ciro-fuel-transactions/ciro-fuel-transactions.service';
+import { CreateCiroFuelTransactionDto } from '../ciro-fuel-transactions/dto/create-ciro-fuel-transaction.dto';
 
 const IMAGE_FIELDS = {
   'dashboard-before': 'carDashboardImageBefore',
@@ -66,6 +68,7 @@ export class PaymentVerificationsService {
     private readonly carsService: CarsService,
     private readonly stationsService: StationsService,
     private readonly fuelPricesService: FuelPricesService,
+    private readonly ciroFuelTransactionsService: CiroFuelTransactionsService,
   ) {}
 
   async start(
@@ -226,7 +229,17 @@ export class PaymentVerificationsService {
     id: string,
     driverId: string,
   ): Promise<PaymentVerificationDocument> {
-    const verification = await this.assertStage(
+    this.validateId(id);
+    let verification =
+      await this.paymentVerificationsRepository.findByIdForDriver(id, driverId);
+    if (!verification) {
+      throw new NotFoundException('Payment verification not found');
+    }
+    if (verification.status === PaymentVerificationStatus.ACCEPTED) {
+      await this.ensureFuelTransaction(verification, driverId);
+      return verification;
+    }
+    verification = await this.assertStage(
       id,
       driverId,
       PaymentVerificationStatus.DASHBOARD_AFTER_FUELING,
@@ -316,6 +329,7 @@ export class PaymentVerificationsService {
           rejectionReasons,
           carFuelTypeSnapshot: car.fuelType,
           carTankCapacitySnapshot: car.tankCapacity,
+          carOwnerIdSnapshot: referencedId(car.owner),
           stationFuelTypesSnapshot: [...stationFuelTypes],
           completedAt: new Date(),
           status: rejectionReasons.length
@@ -324,13 +338,54 @@ export class PaymentVerificationsService {
         },
         this.cutoff(),
       );
-    if (updated) return updated;
+    if (updated) {
+      if (updated.status === PaymentVerificationStatus.ACCEPTED) {
+        await this.ensureFuelTransaction(updated, driverId);
+      }
+
+      return updated;
+    }
 
     return this.failedTransition(
       id,
       driverId,
       PaymentVerificationStatus.DASHBOARD_AFTER_FUELING,
     );
+  }
+
+  private async ensureFuelTransaction(
+    verification: PaymentVerificationDocument,
+    driverId: string,
+  ): Promise<void> {
+    if (
+      verification.calculatedTotalAmount === undefined ||
+      verification.liters === undefined ||
+      !verification.fuelType
+    ) {
+      throw new ConflictException(
+        'Accepted payment verification is missing transaction details',
+      );
+    }
+
+    let ownerId = verification.carOwnerIdSnapshot;
+    if (!ownerId) {
+      const car = await this.carsService.findById(
+        referencedId(verification.car),
+      );
+      ownerId = referencedId(car.owner);
+    }
+
+    const newTransactionDto: CreateCiroFuelTransactionDto = {
+      amountPaid: verification.calculatedTotalAmount,
+      amountRefueled: verification.liters,
+      station: referencedId(verification.station),
+      car: referencedId(verification.car),
+      driver: driverId,
+      owner: ownerId,
+      paymentVerification: verification._id.toString(),
+      fuelType: verification.fuelType,
+    };
+    await this.ciroFuelTransactionsService.create(newTransactionDto);
   }
 
   /** Authenticated image access; resolves only files belonging to the caller's session. */
@@ -414,7 +469,7 @@ export class PaymentVerificationsService {
 
   /** Sessions idle for longer than the TTL are expired. */
   private cutoff(): Date {
-    return new Date(Date.now() - PAYMENT_VERIFICATION_SESSION_TTL_MS);
+    return new Date(Date.now() - CIRO_FUEL_PAYMENT_VERIFICATION_SESSION_TTL_MS);
   }
 
   private isExpired(verification: PaymentVerificationDocument): boolean {
