@@ -12,11 +12,13 @@ services:
     env_file:
       - .env
     environment:
-      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME:-chatapp}?authSource=admin
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME:-chatapp}?authSource=admin&replicaSet=rs0
       REDIS_URL: redis://redis:6379
     depends_on:
       mongodb:
         condition: service_healthy
+      mongo-init-replica:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
@@ -30,16 +32,34 @@ services:
     networks:
       - chat-net
 
+  # 026 (research R2): one-shot. A replica set with auth enabled needs a keyfile.
+  mongo-keyfile:
+    image: mongo:8
+    entrypoint:
+      - bash
+      - -c
+      - test -f /keyfile/key || (openssl rand -base64 756 > /keyfile/key && chmod 400 /keyfile/key && chown 999:999 /keyfile/key)
+    volumes:
+      - mongo_keyfile:/keyfile
+    networks:
+      - chat-net
+
   mongodb:
     image: mongo:8
     container_name: chat-mongo
     restart: unless-stopped
+    # 026 (research R2): single-node replica set so ledger movements run in transactions.
+    command: ['mongod', '--replSet', 'rs0', '--keyFile', '/keyfile/key', '--bind_ip_all']
+    depends_on:
+      mongo-keyfile:
+        condition: service_completed_successfully
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-chatapp}
     volumes:
       - mongodb_data:/data/db
+      - mongo_keyfile:/keyfile
     healthcheck:
       test:
         - CMD
@@ -60,6 +80,28 @@ services:
     networks:
       - chat-net
 
+  # 026 (research R2): one-shot and safe to re-run. Initiates rs0 only if it is not initiated yet.
+  mongo-init-replica:
+    image: mongo:8
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint:
+      - mongosh
+      - --host
+      - mongodb
+      - -u
+      - ${MONGO_ROOT_USERNAME}
+      - -p
+      - ${MONGO_ROOT_PASSWORD}
+      - --authenticationDatabase
+      - admin
+      - --quiet
+      - --eval
+      - "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongodb:27017'}]}) }"
+    networks:
+      - chat-net
+
   redis:
     image: redis:7-alpine
     container_name: chat-redis
@@ -77,6 +119,7 @@ services:
 
 volumes:
   mongodb_data:
+  mongo_keyfile:
   redis_data:
   uploads_data:
 

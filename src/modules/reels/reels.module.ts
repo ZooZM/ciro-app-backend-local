@@ -7,7 +7,7 @@ import { ReelsController } from './reels.controller';
 import { ReelsUsersController } from './reels-users.controller';
 import { ReelsRedirectController } from './reels-redirect.controller';
 import { ReelsAdminController } from './reels-admin.controller';
-import { AdminKeyGuard } from './admin-key.guard';
+import { AdminKeyGuard } from '../../common/guards/admin-key.guard';
 import { ReelsService } from './reels.service';
 import { ReelsDbRepository } from './reels-db.repository';
 import { ReelsSeedService } from './reels-seed.service';

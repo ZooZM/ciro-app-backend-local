@@ -12,3 +12,9 @@ CLAUDE.md
 .specify
 CLAUDE.md
 specs
+# Test coverage and logs
+coverage/
+*.log
+
+# Fuel wallet migration verification reports (written to the working directory by --verify / --retire-legacy)
+fuel-wallet-migration-report-*.json

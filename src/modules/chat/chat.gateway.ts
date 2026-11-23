@@ -93,6 +93,23 @@ export class ChatGateway
     });
   }
 
+  /**
+   * 026 (contracts/socket-events.md): targets every socket of one user via
+   * the personal `user:{userId}` room (fanned out across instances by the
+   * Redis adapter). Callers emit only after their transaction commits; a
+   * failed emit is logged and ignored because clients recover on their next
+   * REST fetch.
+   */
+  emitToUser(userId: string, event: string, payload: unknown): void {
+    try {
+      this.server.to(`user:${userId}`).emit(event, payload);
+    } catch (err) {
+      this.logger.warn(
+        `emitToUser(${userId}, ${event}) failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
   /** Public accessor so MapService/MapGateway-adjacent code can target the same room channels presence uses. */
   getUserRoomIds(userId: string): string[] {
     return this.userRoomIds.get(userId) ?? [];
