@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { DeviceToken, DeviceTokenDocument } from './device-token.schema';
+import {
+  DevicePlatform,
+  DeviceToken,
+  DeviceTokenDocument,
+  PushLocale,
+} from './device-token.schema';
 
 @Injectable()
 export class DeviceTokensRepository {
@@ -13,12 +18,20 @@ export class DeviceTokensRepository {
   async upsertToken(
     userId: string,
     token: string,
-    platform: 'fcm' | 'apns',
+    platform: DevicePlatform,
+    locale: PushLocale = 'ar',
   ): Promise<void> {
     await this.model
       .findOneAndUpdate(
         { userId: new Types.ObjectId(userId), token },
-        { $set: { platform, userId: new Types.ObjectId(userId), token } },
+        {
+          $set: {
+            platform,
+            locale,
+            userId: new Types.ObjectId(userId),
+            token,
+          },
+        },
         { upsert: true },
       )
       .exec();
@@ -30,5 +43,20 @@ export class DeviceTokensRepository {
 
   async deleteAllTokensForUser(userId: string): Promise<void> {
     await this.model.deleteMany({ userId: new Types.ObjectId(userId) }).exec();
+  }
+
+  /** 026 (R8): revoking a watch session removes that user's `apns-watch` tokens. */
+  async deleteByUserAndPlatform(
+    userId: string,
+    platform: DevicePlatform,
+  ): Promise<void> {
+    await this.model
+      .deleteMany({ userId: new Types.ObjectId(userId), platform })
+      .exec();
+  }
+
+  /** APNs answered 410 / BadDeviceToken. */
+  async deleteToken(token: string): Promise<void> {
+    await this.model.deleteMany({ token }).exec();
   }
 }

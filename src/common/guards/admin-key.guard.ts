@@ -8,11 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 
 /**
- * v4 (FR-071): guards the admin moderation endpoints via a static
- * `x-admin-key` header — no user session grants access (these routes sit
- * outside `JwtAuthGuard` entirely, in `ReelsAdminController`). Fails
- * closed: an unset/empty `ADMIN_API_KEY` locks the endpoint out for
- * everyone rather than defaulting open.
+ * Guards operator-only routes via a static `x-admin-key` header: the reels
+ * moderation endpoints (021 v4, FR-071), and since 026 the `/dev/*` simulator
+ * routes (together with JwtAuthGuard + NonProductionGuard) and
+ * `/admin/ledger/*`. Fails closed: an unset/empty `ADMIN_API_KEY` locks the
+ * endpoint out for everyone rather than defaulting open.
  */
 @Injectable()
 export class AdminKeyGuard implements CanActivate {

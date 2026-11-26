@@ -17,6 +17,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let errorType = 'InternalServerError';
+    let data: unknown;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -31,6 +32,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         // Typical structure from NestJS ValidationPipe errors
         message = (exceptionResponse as any).message || exception.message;
         errorType = (exceptionResponse as any).error || exception.name;
+        // 026: some errors carry data the client needs (the pending or current request in 409s).
+        data = (exceptionResponse as any).data;
       }
     } else if (exception instanceof Error) {
       // Unhandled errors (e.g. DB disconnects, logic flaws)
@@ -46,6 +49,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       error: errorType,
       message: message,
       statusCode: status,
+      ...(data !== undefined ? { data } : {}),
     });
   }
 }

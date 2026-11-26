@@ -98,6 +98,29 @@ describe('ChatGateway', () => {
     expect(gateway).toBeDefined();
   });
 
+  describe('emitToUser (026)', () => {
+    it('emits to the personal user room', () => {
+      mockServer.to.mockClear();
+      mockServer.emit.mockClear();
+      gateway.emitToUser('user-9', 'allowanceUpdated', { rev: 3 });
+      expect(mockServer.to).toHaveBeenCalledWith('user:user-9');
+      expect(mockServer.emit).toHaveBeenCalledWith('allowanceUpdated', {
+        rev: 3,
+      });
+    });
+
+    it('logs and swallows emit errors', () => {
+      const failing = {
+        to: jest.fn(() => {
+          throw new Error('adapter down');
+        }),
+      } as any;
+      gateway.server = failing;
+      expect(() => gateway.emitToUser('user-9', 'x', {})).not.toThrow();
+      gateway.server = mockServer;
+    });
+  });
+
   describe('handleConnection', () => {
     it('should verify token and set user on socket', async () => {
       await gateway.handleConnection(mockSocket);

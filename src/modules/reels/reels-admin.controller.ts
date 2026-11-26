@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
-import { AdminKeyGuard } from './admin-key.guard';
+import { AdminKeyGuard } from '../../common/guards/admin-key.guard';
 import { ReelsService } from './reels.service';
 import { AdminHiddenQueryDto } from './dto/admin-hidden-query.dto';
 import { AdminModerationDto } from './dto/admin-moderation.dto';

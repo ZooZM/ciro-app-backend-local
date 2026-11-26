@@ -22,10 +22,19 @@ import { CarsModule } from './modules/ciro-fuel/cars/cars.module';
 import { CarOwnershipsModule } from './modules/ciro-fuel/car-ownerships/car-ownerships.module';
 import { DriverInvitationsModule } from './modules/ciro-fuel/driver-invitations/driver-invitations.module';
 import { PaymentVerificationsModule } from './modules/ciro-fuel/payment-verifications/payment-verifications.module';
-import { WalletsModule } from './modules/ciro-fuel/wallets/wallets.module';
 import { CiroFuelTransactionsModule } from './modules/ciro-fuel/ciro-fuel-transactions/ciro-fuel-transactions.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { OpsAlertModule } from './common/ops-alert/ops-alert.module';
+import { devModules } from './dev-modules';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { FamilyCoreModule } from './modules/family-core/family-core.module';
+import { CardsModule } from './modules/cards/cards.module';
+import { FamilyModule } from './modules/family/family.module';
+import { AllowanceModule } from './modules/allowance/allowance.module';
+import { AllowanceRequestsModule } from './modules/allowance-requests/allowance-requests.module';
 import * as Joi from 'joi';
+
+const DEV_MODULES = devModules();
 
 @Module({
   imports: [
@@ -67,6 +76,26 @@ import * as Joi from 'joi';
         REEL_REPORT_AUTOHIDE_THRESHOLD: Joi.number().default(25),
         REEL_REPORT_DAILY_LIMIT: Joi.number().default(20),
         ADMIN_API_KEY: Joi.string().optional().allow(''),
+
+        // Kids allowance (specs/026-kids-allowance-watch)
+        ISSUER_PROVIDER: Joi.string().valid('stub').default('stub'),
+        ALLOWANCE_MAX_AMOUNT_HALALAS: Joi.number()
+          .integer()
+          .min(1)
+          .default(1000000),
+        ALLOWANCE_MAX_REQUEST_HALALAS: Joi.number()
+          .integer()
+          .min(1)
+          .default(50000),
+        APNS_KEY_ID: Joi.string().optional().allow(''),
+        APNS_TEAM_ID: Joi.string().optional().allow(''),
+        APNS_PRIVATE_KEY: Joi.string().optional().allow(''),
+        APNS_WATCH_TOPIC: Joi.string().optional().allow(''),
+        APNS_ENV: Joi.string()
+          .valid('sandbox', 'production')
+          .optional()
+          .allow(''),
+        OPS_ALERT_WEBHOOK_URL: Joi.string().uri().optional().allow(''),
       }),
     }),
 
@@ -112,6 +141,9 @@ import * as Joi from 'joi';
       inject: [ConfigService],
     }),
 
+    // Ops alerts (026, FR-022): global, used by the ledger and payouts
+    OpsAlertModule,
+
     // Application Modules
     UsersModule,
     AuthModule,
@@ -129,9 +161,17 @@ import * as Joi from 'joi';
     CarOwnershipsModule,
     DriverInvitationsModule,
     PaymentVerificationsModule,
-    WalletsModule,
     CiroFuelTransactionsModule,
     TransactionsModule,
+
+    // Kids allowance (specs/026-kids-allowance-watch)
+    WalletModule,
+    FamilyCoreModule,
+    CardsModule,
+    FamilyModule,
+    AllowanceModule,
+    AllowanceRequestsModule,
+    ...DEV_MODULES,
   ],
   controllers: [AppController],
   providers: [AppService],
